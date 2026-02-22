@@ -62,12 +62,30 @@
         }
 
         .status { 
-            font-size: 1.1rem; 
-            color: #00ff41; 
-            text-transform: uppercase; 
-            animation: blink 1.5s infinite; 
-            margin-bottom: 2rem;
-        }
+    font-size: 1.1rem; 
+    color: #00ff41; 
+    text-transform: uppercase; 
+    overflow: hidden; /* Ensures the text stays inside the box as it types */
+    border-right: .15em solid #00ff41; /* The blinking cursor */
+    white-space: nowrap; /* Keeps the text on one line */
+    margin: 0 auto 2rem auto; 
+    letter-spacing: .15em; 
+    animation: 
+        typing 3.5s steps(30, end),
+        blink-caret .75s step-end infinite;
+}
+
+/* The typing effect */
+@keyframes typing {
+    from { width: 0 }
+    to { width: 100% }
+}
+
+/* The typewriter cursor */
+@keyframes blink-caret {
+    from, to { border-color: transparent }
+    50% { border-color: #00ff41; }
+}
 
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
 
@@ -110,3 +128,4 @@
     </div>
 </body>
 </html>
+
