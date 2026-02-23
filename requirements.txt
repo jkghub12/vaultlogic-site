@@ -1,4 +1,5 @@
 python-dotenv
 requests
 web3
-coinbase-sdk
+cdp-sdk
+google-generativeai
