@@ -3,3 +3,6 @@ requests
 web3
 cdp-sdk
 google-generativeai
+fastapi
+uvicorn
+httpx
