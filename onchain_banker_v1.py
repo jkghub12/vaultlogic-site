@@ -61,15 +61,12 @@ async def fetch_live_base_yields():
 
 @app.get("/")
 async def read_root():
-    """Professional Status Page for opi.vaultlogic.dev"""
     return {
         "status": "online",
-        "business": "VaultLogic Dev LLC",
+        "legal_entity": "VaultLogic Dev LLC",  # Official Name
         "engine": "On-Chain Banker v1",
-        "vault_monitored": BANKER_VAULT,
-        "message": "System is operational. Background banker is active."
+        "message": "Proprietary financial intelligence engine active."
     }
-
 @app.get("/scout")
 async def scout_yields(request: Request):
     """
