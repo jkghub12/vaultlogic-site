@@ -8,29 +8,56 @@ load_dotenv()
 class DeFiYieldScout:
     def __init__(self):
         self.api_key = os.getenv("COINGECKO_API_KEY")
-        self.base_url = "https://api.coingecko.com/api/v3"
-        # Example Pool IDs for Base Network from GeckoTerminal
-        self.pool_ids = {
-            "uniswap_v3": "base_0x6854580b06716d1f99c0d48e8e7a68e0d9b4b0e8",
-            "curve_stableswap": "base_0x3e107f9c211246e7f12e9e62319f3900d112d7c5",
-            "aerodrome": "base_0x6854580b06716d1f99c0d48e8e7a68e0d9b4b0e8" # Example Aero Pool
-        }
+        # Base network ID for GeckoTerminal
+        self.network = "base"
+        
+        # Specific Pool IDs for major USDC pools on Base
+        # You can find these IDs on GeckoTerminal.com
+        self.pool_addresses = [
+            "0x6854580b06716d1f99c0d48e8e7a68e0d9b4b0e8", # Aerodrome USDC/ETH
+            "0x8e83344697f26284f180738a53e36e1c940b5435", # Uniswap V3 USDC/ETH
+            "0x6854580b06716d1f99c0d48e8e7a68e0d9b4b0e8"  # Curve USDC/USDT
+        ]
 
     def get_best_yield(self):
-        """Fetches aggregated data and returns the best pool"""
-        best_pool = {"protocol": "None", "apy": 0.0}
+        """Fetches aggregated data from multiple pools and returns the best"""
         
-        # In a real implementation, you would loop through self.pool_ids
-        # and query the GeckoTerminal API for each ID.
-        # For this example, we return a simulated aggregated result.
+        if not self.api_key:
+            return {"protocol": "Error", "apy": 0.0, "message": "Missing API Key"}
+
+        # Format addresses for the multi-pool endpoint
+        addresses_str = ",".join(self.pool_addresses)
+        url = f"https://api.coingecko.com/api/v3/onchain/networks/{self.network}/pools/multi/{addresses_str}"
         
-        simulated_data = [
-            {"protocol": "Aave", "apy": 2.11},
-            {"protocol": "Uniswap", "apy": 3.45},
-            {"protocol": "Curve", "apy": 1.8},
-            {"protocol": "Aerodrome", "apy": 4.12}
-        ]
-        
-        # Find best yield
-        best_pool = max(simulated_data, key=lambda x: x["apy"])
-        return best_pool
+        headers = {
+            "accept": "application/json",
+            "x-cg-demo-api-key": self.api_key
+        }
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            
+            pools = data.get("data", [])
+            best_pool = {"protocol": "None", "apy": 0.0}
+
+            for pool in pools:
+                attributes = pool.get("attributes", {})
+                
+                # Get the APY (GeckoTerminal calls it h24_apy or similar)
+                apy = float(attributes.get("h24_apy", 0.0))
+                
+                # Get Protocol Name
+                protocol = attributes.get("dex", {}).get("name", "Unknown")
+
+                if apy > best_pool["apy"]:
+                    best_pool = {
+                        "protocol": protocol,
+                        "apy": apy
+                    }
+            
+            return best_pool
+
+        except Exception as e:
+            return {"protocol": "Error", "apy": 0.0, "message": str(e)}
