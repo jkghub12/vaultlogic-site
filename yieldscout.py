@@ -1,67 +1,86 @@
-# yieldscout.py
-import requests
 import os
 from web3 import Web3
+from dotenv import load_dotenv
+
+# Load environment variables (ETH_RPC_URL) from .env file
+load_dotenv()
 
 class DeFiYieldScout:
     def __init__(self):
-        # We keep the APIs as secondary, but RPC is our primary source
-        self.w3_rpc = os.getenv("ETH_RPC_URL")
-        self.w3 = Web3(Web3.HTTPProvider(self.w3_rpc))
+        # Connect to Ethereum Mainnet using your Alchemy URL
+        rpc_url = os.getenv("ETH_RPC_URL")
+        if not rpc_url:
+            raise ValueError("❌ ETH_RPC_URL not found in .env file")
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+        self.protocols = ['aave', 'curve', 'uniswap']
+
+    def fetch_aave_rates(self, asset_symbol='USDC'):
+        """Fetches REAL APY from Aave V3 Protocol Data Provider"""
         
-        # Aave V3 Pool Data Provider Address on Base
-        # This contract gives us the 'Reserve Data' (Interest Rates)
-        self.AAVE_DATA_PROVIDER = "0x2d8A3C567e8097Cc648094b9118C5b38d0672052"
-        # USDC Address on Base
-        self.USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        # 1. Correct Mainnet Aave Protocol Data Provider Address (Verified)
+        AAVE_PROVIDER_ADDRESS = Web3.to_checksum_address("0x497a1994c46d4f6C864904A9f1fac6328Cb7C8a6")
+        
+        # 2. Verify deployment
+        if not self.w3.is_connected():
+            print("❌ Not connected to Ethereum node")
+            return {"protocol": "Aave", "asset": asset_symbol, "apy": 0}
 
-    def get_aave_yield_rpc(self):
-        """Fetches yield directly from Aave Smart Contracts (No API needed)"""
         try:
-            # Minimal ABI to get the data we need
-            abi = [{"inputs":[{"internalType":"address","name":"asset","type":"address"}],"name":"getReserveData","outputs":[{"internalType":"uint256","name":"unbacked","type":"uint256"},{"internalType":"uint256","name":"accruedToTreasuryScaled","type":"uint256"},{"internalType":"uint256","name":"totalAToken","type":"uint256"},{"internalType":"uint256","name":"totalStableDebt","type":"uint256"},{"internalType":"uint256","name":"totalVariableDebt","type":"uint256"},{"internalType":"uint256","name":"liquidityRate","type":"uint256"},{"internalType":"uint256","name":"variableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"stableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"averageStableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"liquidityIndex","type":"uint256"},{"internalType":"uint256","name":"variableBorrowIndex","type":"uint256"},{"internalType":"uint40","name":"lastUpdateTimestamp","type":"uint40"}],"stateMutability":"view","type":"function"}]
-            
-            contract = self.w3.eth.contract(address=self.AAVE_DATA_PROVIDER, abi=abi)
-            # liquidityRate is output index 5
-            reserve_data = contract.functions.getReserveData(self.USDC_ADDRESS).call()
-            
-            # rate is in RAY (10^27). Percentage = (rate / 10^27) * 100
-            ray = 10**27
-            apy = (reserve_data[5] / ray) * 100
-            return round(apy, 2)
+            code = self.w3.eth.get_code(AAVE_PROVIDER_ADDRESS)
+            if code == b'' or code == b'x00':
+                print(f"❌ No contract code found at {AAVE_PROVIDER_ADDRESS}")
+                return {"protocol": "Aave", "asset": asset_symbol, "apy": 0}
+            else:
+                print(f"✅ Contract code found at {AAVE_PROVIDER_ADDRESS}")
         except Exception as e:
-            print(f"❌ RPC Aave Error: {e}")
-            return 0.0
+            print(f"Error checking contract: {e}")
+            return {"protocol": "Aave", "asset": asset_symbol, "apy": 0}
 
-    def get_aerodrome_yield(self):
-        """Modified Aerodrome fetcher with more safety"""
-        url = "https://aero.drome.eth.limo/v1/pools"
+        # 3. Correct ABI for ProtocolDataProviderV3 (Missing quotes fixed here)
+        abi = '''[{"inputs":[{"internalType":"address","name":"asset","type":"address"}],"name":"getReserveData","outputs":[{"components":[{"internalType":"uint256","name":"unbacked","type":"uint256"},{"internalType":"uint256","name":"accruedToTreasuryScaled","type":"uint256"},{"internalType":"uint256","name":"totalAToken","type":"uint256"},{"internalType":"uint256","name":"totalStableDebt","type":"uint256"},{"internalType":"uint256","name":"totalVariableDebt","type":"uint256"},{"internalType":"uint256","name":"liquidityRate","type":"uint256"},{"internalType":"uint256","name":"variableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"stableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"averageStableBorrowRate","type":"uint256"},{"internalType":"uint256","name":"liquidityIndex","type":"uint256"},{"internalType":"uint256","name":"variableBorrowIndex","type":"uint256"},{"internalType":"uint256","name":"lastUpdateTimestamp","type":"uint40"}],"internalType":"struct IPoolDataProvider.ReserveData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"}]'''
+        
+        contract = self.w3.eth.contract(address=AAVE_PROVIDER_ADDRESS, abi=abi)
+        
+        # Asset addresses (Ethereum Mainnet)
+        assets = {
+            'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F'
+        }
+        asset_address = assets.get(asset_symbol)
+        
+        if not asset_address:
+            print(f"Asset {asset_symbol} not supported.")
+            return {"protocol": "Aave", "asset": asset_symbol, "apy": 0}
+
+        # 4. The actual call with the 'from' parameter
+        print(f"Fetching REAL Aave rates for {asset_symbol}...")
         try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                # This ensures we actually got JSON before parsing
-                data = response.json()
-                pools = data.get("data", [])
-                for pool in pools:
-                    if "USDC" in pool.get("symbol", ""):
-                        return round(float(pool.get("apr", 0.0)), 2)
-            return 0.0
+            # The 'from' address is needed for some call simulations
+            reserve_data = contract.functions.getReserveData(asset_address).call(
+                {'from': '0x0000000000000000000000000000000000000000'}
+            )
+            liquidity_rate = reserve_data[5] # Index 5 is liquidityRate (deposit rate)
+            
+            # Aave rates are in RAY (10^27)
+            apy = (liquidity_rate / 10**27) * 100 
+            return {"protocol": "Aave", "asset": asset_symbol, "apy": round(apy, 2)}
         except Exception as e:
-            print(f"⚠️ Aerodrome API failed (Expected during DNS issues): {e}")
-            return 0.0
+            print(f"Error fetching Aave rates: {e}")
+            return {"protocol": "Aave", "asset": asset_symbol, "apy": 0}
 
     def get_best_yield(self):
-        """Prioritizes RPC-based Aave data as it's the most reliable"""
-        aave_apy = self.get_aave_yield_rpc()
-        aero_apy = self.get_aerodrome_yield()
-        
-        # If Aerodrome is working and higher, take it
-        if aero_apy > aave_apy:
-            return {"protocol": "Aerodrome", "apy": aero_apy}
-        
-        # If Aave RPC worked, return it
-        if aave_apy > 0:
-            return {"protocol": "Aave V3 (Direct)", "apy": aave_apy}
-            
-        # Hard fallback for March 2026 market baseline
-        return {"protocol": "Base Market (Est)", "apy": 3.45}
+        # Logic to compare rates and pick the winner
+        aave = self.fetch_aave_rates()
+        # For now, just compare Aave against placeholders
+        rates = [aave] # Adding other protocols later
+        best = max(rates, key=lambda x: x['apy'])
+        return best
+
+# --- Main Execution ---
+if __name__ == "__main__":
+    try:
+        scout = DeFiYieldScout()
+        best_option = scout.get_best_yield()
+        print(f"Best Yield Option: {best_option}")
+    except Exception as e:
+        print(f"Application error: {e}")
