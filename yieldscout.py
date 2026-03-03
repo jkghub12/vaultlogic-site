@@ -3,27 +3,10 @@ import requests
 
 class DeFiYieldScout:
     def __init__(self):
-        # Direct API for Aerodrome Pools
-        self.aero_api = "https://api.aerodrome.finance/v1/pools"
-        # Aave V3 Base Market - using the widely used subgraphs or public indexers
+        # Aave V3 Base Market - Your working endpoint
         self.aave_api = "https://api.aavescan.com/v2/latest?market=aave-v3-base"
-
-    def get_aerodrome_yield(self):
-        """Fetches Aerodrome USDC/WETH pool APY"""
-        try:
-            response = requests.get(self.aero_api, timeout=10)
-            if response.status_code == 200:
-                pools = response.json().get("data", [])
-                for pool in pools:
-                    # Look for the primary USDC/WETH volatile pool
-                    if "USDC" in pool.get("symbol", "") and "WETH" in pool.get("symbol", ""):
-                        # Aerodrome often returns 'apr' which is our yield
-                        apr = float(pool.get("apr", 0.0))
-                        return round(apr, 2)
-            return 0.0
-        except Exception as e:
-            print(f"Aerodrome Scout Error: {e}")
-            return 0.0
+        # Aerodrome Public API
+        self.aero_api = "https://api.aerodrome.finance/v1/pools"
 
     def get_aave_yield(self):
         """Fetches Aave V3 Supply APY for USDC"""
@@ -33,26 +16,42 @@ class DeFiYieldScout:
                 data = response.json()
                 for asset in data:
                     if asset.get("symbol") == "USDC":
-                        # Aave rates are often stored as Rays (10^27)
-                        # currentLiquidityRate is the supply APY
+                        # currentLiquidityRate is the supply APR
+                        # Raw value is in Rays (10^27), convert to %
                         raw_rate = float(asset.get("currentLiquidityRate", 0))
-                        apy = (raw_rate / 10**25) * 100 # Adjusting for percentage
-                        return round(apy, 2)
+                        return round((raw_rate / 10**25), 2)
             return 0.0
-        except Exception as e:
-            print(f"Aave Scout Error: {e}")
+        except Exception:
+            return 0.0
+
+    def get_aerodrome_yield(self):
+        """Fetches Aerodrome USDC/WETH pool APY"""
+        try:
+            response = requests.get(self.aero_api, timeout=10)
+            if response.status_code == 200:
+                pools = response.json().get("data", [])
+                for pool in pools:
+                    # Target the volatile USDC/WETH pool (highest typical yield)
+                    if "USDC" in pool.get("symbol", "") and "WETH" in pool.get("symbol", ""):
+                        # Aerodrome uses 'apr' for their emissions yield
+                        return round(float(pool.get("apr", 0.0)), 2)
+            return 0.0
+        except Exception:
             return 0.0
 
     def get_best_yield(self):
-        """Compares and returns the winner"""
-        aero = self.get_aerodrome_yield()
-        aave = self.get_aave_yield()
+        """Compares all active protocols and returns the winner"""
+        yields = {
+            "Aave V3": self.get_aave_yield(),
+            "Aerodrome": self.get_aerodrome_yield()
+        }
         
-        # We prefer Aerodrome if the yield is significantly higher (which it usually is)
-        if aero >= aave and aero > 0:
-            return {"protocol": "Aerodrome", "apy": aero}
-        elif aave > 0:
-            return {"protocol": "Aave V3", "apy": aave}
-        else:
-            # Fallback if both APIs fail or return 0
-            return {"protocol": "Check Dashboard", "apy": 0.0}
+        # Find the protocol with the highest APY
+        best_protocol = max(yields, key=yields.get)
+        best_apy = yields[best_protocol]
+
+        # If everything is 0, return a fallback
+        if best_apy == 0:
+            return {"protocol": "Searching...", "apy": 0.0}
+            
+        return {"protocol": best_protocol, "apy": best_apy}
