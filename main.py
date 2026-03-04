@@ -17,12 +17,12 @@ from yieldscout import get_all_yields
 
 load_dotenv()
 
-app = FastAPI(title="VaultLogic AI")
+app = FastAPI(title="VaultLogic Ecosystem")
 
-# --- 1. MOUNT LOGO ---
+# Connect the Logo/Static files
 app.mount("/static", StaticFiles(directory="."), name="static")
 
-# --- 2. IDENTITY SETUP ---
+# --- 1. IDENTITY SETUP ---
 def get_llc_account():
     with open("vaultlogic_wallet.json", "r") as f:
         data = json.load(f)
@@ -35,85 +35,117 @@ wallet_provider = EthAccountWalletProvider(
     )
 )
 
-# --- 3. THE BACKGROUND HEARTBEAT (The Database Fix) ---
+# --- 2. THE BACKGROUND ENGINE (Heartbeat + Logic) ---
 @app.on_event("startup")
-async def start_heartbeat():
+async def start_engine():
     async def heartbeat():
         while True:
             try:
-                # This line is what pushes data to your Railway Postgres
+                # 1. Pull data and save to Postgres
                 get_all_yields()
-                print("💓 Heartbeat: Vault Data Pushed to Database")
+                print("💓 Engine Sync: Data logged to Database.")
+                
+                # 2. Rebalancer Logic could go here next...
+                
             except Exception as e:
-                print(f"💓 Heartbeat Error: {e}")
-            await asyncio.sleep(60) # Scan every 60 seconds
+                print(f"💓 Engine Error: {e}")
+            await asyncio.sleep(60) 
     
     asyncio.create_task(heartbeat())
 
-# --- 4. THE DASHBOARD UI ---
-HTML_CONTENT = f"""
+# --- 3. UI COMPONENTS (HTML) ---
+
+# GENERIC LANDING PAGE (Public)
+LANDING_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VaultLogic AI</title>
+    <meta charset="UTF-8"><title>VaultLogic | Autonomous Systems</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>body { background: #020617; font-family: sans-serif; }</style>
+</head>
+<body class="text-slate-200">
+    <nav class="p-8 flex justify-between items-center max-w-6xl mx-auto">
+        <div class="flex items-center">
+            <img src="/static/VLlogo.png" class="h-10 mr-3">
+            <span class="text-2xl font-bold tracking-tighter">VaultLogic</span>
+        </div>
+        <a href="/vault" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full text-sm font-semibold transition">Enter Vault</a>
+    </nav>
+    <header class="py-20 text-center px-4">
+        <h1 class="text-6xl font-extrabold mb-6">Engineering Logic into <span class="text-blue-500">Value.</span></h1>
+        <p class="max-w-2xl mx-auto text-slate-400 text-xl leading-relaxed">
+            VaultLogic develops autonomous ecosystems for digital and physical assets. 
+            Smart capital, smarter logistics, absolute logic.
+        </p>
+    </header>
+</body>
+</html>
+"""
+
+# CRYPTO DASHBOARD (Private)
+DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>VaultLogic AI | Command Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {{ background-color: #050a14; font-family: 'Inter', sans-serif; }}
-        .glass {{ background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }}
+        body { background-color: #050a14; }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
     </style>
 </head>
-<body class="text-slate-200 min-h-screen flex flex-col items-center justify-center p-6 text-center">
+<body class="text-slate-200 min-h-screen flex flex-col items-center justify-center p-6">
     <div class="max-w-md w-full glass rounded-3xl p-8 shadow-2xl">
-        <div class="flex items-center justify-center mb-8">
-            <img src="/static/VLlogo.png" alt="VL" class="h-12 w-auto mr-4 rounded-lg">
-            <div class="text-left">
-                <h1 class="text-2xl font-bold tracking-tight text-white">VaultLogic <span class="text-blue-500">AI</span></h1>
-                <p class="text-[10px] text-slate-500 uppercase tracking-widest">Autonomous Wealth Engine</p>
+        <div class="flex items-center mb-8">
+            <img src="/static/VLlogo.png" alt="VL" class="h-10 w-auto mr-4 rounded-lg">
+            <div>
+                <h1 class="text-2xl font-bold text-white uppercase tracking-tighter">VaultLogic <span class="text-blue-500">Banker</span></h1>
+                <p class="text-[9px] text-slate-500 uppercase tracking-widest italic">Capital Rebalancer v1.0</p>
             </div>
         </div>
-        <div class="mb-6">
-            <p class="text-[9px] text-slate-500 uppercase mb-1">Agent Address</p>
-            <p class="text-[10px] font-mono text-blue-400 bg-blue-500/10 p-2 rounded-lg break-all">{wallet_provider.get_address()}</p>
-        </div>
-        <div class="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 mb-6">
-            <p class="text-xs text-slate-500 mb-1 uppercase">Aave V3 Yield</p>
+        <div class="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 mb-6 text-center">
+            <p class="text-xs text-slate-500 mb-1 uppercase">Aave V3 Base Yield</p>
             <h2 id="aave-yield" class="text-5xl font-bold text-green-400">--%</h2>
         </div>
-        <div class="grid grid-cols-2 gap-4 mb-8">
+        <div class="grid grid-cols-2 gap-4 mb-8 text-center">
             <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                <p class="text-[10px] text-slate-500 uppercase">ETH</p>
+                <p class="text-[10px] text-slate-500 uppercase">ETH Balance</p>
                 <p id="eth-bal" class="text-xl font-semibold">--</p>
             </div>
             <div class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                <p class="text-[10px] text-slate-500 uppercase">USDC</p>
+                <p class="text-[10px] text-slate-500 uppercase">USDC Balance</p>
                 <p id="usdc-bal" class="text-xl font-semibold">--</p>
             </div>
         </div>
-        <div class="text-[10px] text-slate-700">Last Scan: <span id="timestamp">--</span></div>
+        <div class="text-[10px] text-center text-slate-700">System Status: Active | Last Scan: <span id="timestamp">--</span></div>
     </div>
     <script>
-        async function fetchVaultData() {{
-            try {{
-                const response = await fetch('/api/yield');
-                const data = await response.json();
-                document.getElementById('aave-yield').innerText = data.yields[0].yield;
-                document.getElementById('eth-bal').innerText = data.wallet.balance_eth || data.wallet.eth;
-                document.getElementById('usdc-bal').innerText = data.wallet.usdc || "0.00";
-                document.getElementById('timestamp').innerText = data.last_updated;
-            }} catch (error) {{ console.error("AI Sync Error:", error); }}
-        }}
-        fetchVaultData();
-        setInterval(fetchVaultData, 30000); 
+        async function update() {
+            try {
+                const res = await fetch('/api/yield');
+                const d = await res.json();
+                document.getElementById('aave-yield').innerText = d.yields[0].yield;
+                document.getElementById('eth-bal').innerText = d.wallet.balance_eth || d.wallet.eth;
+                document.getElementById('usdc-bal').innerText = d.wallet.usdc || "0.00";
+                document.getElementById('timestamp').innerText = d.last_updated;
+            } catch (e) { console.log(e); }
+        }
+        update(); setInterval(update, 30000);
     </script>
 </body>
 </html>
 """
 
-# --- 5. THE ROUTES ---
+# --- 4. THE ROUTES ---
+
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return HTML_CONTENT
+async def home():
+    return LANDING_HTML
+
+@app.get("/vault", response_class=HTMLResponse)
+async def vault_dashboard():
+    return DASHBOARD_HTML
 
 @app.get("/api/yield")
 async def yield_api():
