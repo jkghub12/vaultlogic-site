@@ -1,17 +1,8 @@
-# Web & API
 fastapi
 uvicorn
-httpx
-requests
 python-dotenv
-
-# Web3 & Coinbase
-web3
-cdp-sdk
-
-# AI
-google-genai
-
-# Database (Essential for Railway Postgres)
-sqlalchemy
+coinbase-agentkit
+coinbase-agentkit-langchain
+eth-account
+requests
 psycopg2-binary
