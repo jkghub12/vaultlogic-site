@@ -11,8 +11,8 @@ RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-# The Aave V3 Protocol Data Provider for Base
-AAVE_DATA_PROVIDER = "0x2d8a3C5677189723C4cB8873CfC9C8974F701758"
+# OFFICIAL AAVE V3 DATA PROVIDER (BASE MAINNET)
+AAVE_PROVIDER_ADDRESS = "0x2d8a3C5677189723C4cB8873CfC9C8974F701758"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
 AAVE_ABI = '[{"inputs":[{"internalType":"address","name":"asset","type":"address"}],"name":"getReserveData","outputs":[{"components":[{"internalType":"uint256","name":"unbacked","type":"uint256"},{"internalType":"uint256","name":"accruedToTreasuryScaled","type":"uint256"},{"internalType":"uint256","name":"totalAToken","type":"uint256"},{"internalType":"uint256","name":"totalStableDebt","type":"uint256"},{"internalType":"uint256","name":"totalVariableDebt","type":"uint256"},{"internalType":"uint128","name":"liquidityRate","type":"uint128"}],"internalType":"struct IProtocolDataProvider.TokenData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"}]'
@@ -31,31 +31,45 @@ def save_to_db(platform, yield_val):
         print(f"DB Error: {e}")
 
 def get_aave_yield():
+    # 1. Verify Connection
+    if not w3.is_connected():
+        print("❌ Not connected to Base node")
+        return 0.0
+
     try:
-        # Force checksum addresses to prevent errors
-        provider_addr = Web3.to_checksum_address(AAVE_DATA_PROVIDER)
-        asset_addr = Web3.to_checksum_address(USDC_ADDRESS)
-        
+        # Checksum the addresses
+        provider_addr = w3.to_checksum_address(AAVE_PROVIDER_ADDRESS)
+        asset_addr = w3.to_checksum_address(USDC_ADDRESS)
+
+        # 2. Verify Contract exists at address
+        code = w3.eth.get_code(provider_addr)
+        if code == b'' or code == b'\x00':
+            print(f"❌ No contract code found at {provider_addr}")
+            return 0.0
+
+        # 3. Connect to contract
         contract = w3.eth.contract(address=provider_addr, abi=AAVE_ABI)
-        data = contract.functions.getReserveData(asset_addr).call()
         
-        # data[5] is liquidityRate in Ray (10^27)
-        # Formula: (Rate / 10^27) * 100
-        actual_yield = (data[5] / 10**27) * 100
-        return round(actual_yield, 2)
+        # 4. Fetch Data (liquidityRate is the 6th element, index 5)
+        reserve_data = contract.functions.getReserveData(asset_addr).call()
+        
+        # Convert RAY (10^27) to percentage
+        apy = (reserve_data[5] / 10**27) * 100
+        return round(apy, 2)
+
     except Exception as e:
-        print(f"Aave Engine Error: {e}")
+        print(f"Aave Error: {e}")
         return 0.0
 
 def get_all_yields():
-    aave = get_aave_yield()
-    uni = 3.50  # Hardcoded for now
+    aave_val = get_aave_yield()
+    uni_val = 3.50  # Placeholder
     
-    # Save the real numbers to your Postgres history
-    save_to_db("Aave", aave)
-    save_to_db("Uniswap", uni)
+    # Save to Postgres
+    save_to_db("Aave", aave_val)
+    save_to_db("Uniswap", uni_val)
     
     return [
-        {"platform": "Aave", "yield": f"{aave}%"},
-        {"platform": "Uniswap", "yield": f"{uni}%"}
+        {"platform": "Aave", "yield": f"{aave_val}%"},
+        {"platform": "Uniswap", "yield": f"{uni_val}%"}
     ]
