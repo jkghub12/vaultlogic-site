@@ -1,8 +1,6 @@
-# app.py
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from yieldscout import DeFiYieldScout
+from yieldscout import DeFiYieldScout, save_to_railway
 import os
 import asyncio
 from web3 import Web3
@@ -12,7 +10,6 @@ load_dotenv()
 
 app = FastAPI(title="VaultLogic Yield API")
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,51 +18,54 @@ app.add_middleware(
 )
 
 # Configuration
-W3_RPC = os.getenv("ETH_RPC_URL") # Use your env var
+W3_RPC = os.getenv("ETH_RPC_URL")
 w3 = Web3(Web3.HTTPProvider(W3_RPC))
-VAULT_ENV = os.getenv("BANKER_VAULT_ADDRESS")
+VAULT_ENV = os.getenv("BANKER_VAULT_ADDRESS", "0x0000000000000000000000000000000000000000")
 BANKER_VAULT = Web3.to_checksum_address(VAULT_ENV)
 
-# Initialize the scout
 try:
     scout = DeFiYieldScout()
 except Exception as e:
     print(f"Error starting Scout: {e}")
     scout = None
 
-# --- BACKGROUND LOOP ---
+# --- IMPROVED BANKER LOOP ---
 async def active_banking_loop():
     print(f"🚀 [Banker Startup] Monitoring Vault: {BANKER_VAULT}")
     while True:
         try:
+            # 1. Check Balance
             balance_wei = w3.eth.get_balance(BANKER_VAULT)
             balance_eth = w3.from_wei(balance_wei, 'ether')
-            print(f"🏦 BANKER REPORT: Vault balance is {balance_eth:.6f} ETH")
+            
+            # 2. Trigger a Scout and Save to DB automatically every minute
+            if scout:
+                current_data = scout.get_best_yield()
+                save_to_railway(current_data)
+                best = current_data[0]
+                print(f"🏦 BANKER REPORT: Balance {balance_eth:.4f} ETH | Best Yield: {best['protocol']} ({best['apy']}%)")
+            
         except Exception as e:
             print(f"❌ Banker Loop Error: {e}")
-        await asyncio.sleep(60)
+        
+        await asyncio.sleep(60) # Run every minute
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(active_banking_loop())
 
-# --- ROUTES ---
 @app.get("/")
 def read_root():
-    return {
-        "status": "online",
-        "legal_entity": "VaultLogic Dev LLC",
-        "engine": "On-Chain Banker v1",
-        "message": "Proprietary financial intelligence engine active."
-    }
+    return {"status": "online", "engine": "VaultLogic Banker v1"}
 
 @app.get("/api/yield")
 async def get_yield():
-    """Endpoint that returns the best yield option as JSON"""
     if not scout:
         raise HTTPException(status_code=500, detail="Yield Scout not initialized")
     try:
         data = scout.get_best_yield()
+        # Also trigger a save when the web API is called
+        save_to_railway(data)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
