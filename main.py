@@ -112,6 +112,25 @@ HTML_CONTENT = """
 </body>
 </html>
 """
+import asyncio
+
+# This is the "Engine" that runs in the background
+@app.on_event("startup")
+async def start_heartbeat():
+    async def heartbeat():
+        while True:
+            try:
+                # This is the magic line that saves to your Postgres
+                print("💓 Banker is scanning and saving to Database...")
+                get_all_yields() 
+            except Exception as e:
+                print(f"💓 Heartbeat Error: {e}")
+            
+            # Wait 60 seconds before scanning again
+            await asyncio.sleep(60) 
+    
+    # This creates the task so it doesn't block the website from loading
+    asyncio.create_task(heartbeat())
 
 # --- 4. THE ROUTES ---
 @app.get("/", response_class=HTMLResponse)
