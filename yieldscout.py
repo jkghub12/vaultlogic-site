@@ -14,10 +14,10 @@ load_dotenv()
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 
-# THE CORRECT WALLET ADDRESS
-BANKER_VAULT_ADDRESS = "0x31d8210350bc719fDfde1149f6aEDF9420E1b889"
+# Prioritizes the Railway Variable, falls back to your real wallet
+BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
 
-# Protocol Addresses
+# Protocol Addresses (Base Mainnet)
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
 USDC_ADDR = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 UNI_POOL_ADDRESS = "0x4C36388bE6F416A29C8d8Eee81c771cE6bE14B18"
@@ -27,7 +27,7 @@ AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserv
 UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 ERC20_ABI = [{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
 
-# Global State
+# Global State for Yield Calculation
 last_fee_growth = None
 last_check_time = None
 
@@ -37,8 +37,10 @@ def get_aave_yield():
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         contract = w3.eth.contract(address=w3.to_checksum_address(DATA_PROVIDER), abi=AAVE_ABI)
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_ADDR)).call()
+        # Ray math (1e27) conversion
         return round((float(data[5]) / 1e27) * 100, 2)
     except Exception as e:
+        print(f"⚠️ Aave Error: {e}")
         return 2.40
 
 def get_uniswap_yield():
@@ -59,29 +61,33 @@ def get_uniswap_yield():
         
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            # Calibrating for pool share - assuming 0.01% ownership of the liquidity
-            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.01 
-            return round(max(0.5, min(raw_yield, 25.0)), 2)
+            # Assuming a modest share of the total liquidity pool
+            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05 
+            return round(max(0.5, min(raw_yield, 20.0)), 2)
         return 3.50
-    except Exception as e:
-        print(f"⚠️ Uni Error: {e}")
+    except Exception:
         return 3.50
 
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS)
+        # Ensure the address is trimmed of the '9' or any stray characters
+        clean_addr = BANKER_VAULT_ADDRESS.strip()
+        if len(clean_addr) > 42:
+            clean_addr = clean_addr[:42]
+            
+        vault_addr = w3.to_checksum_address(clean_addr)
         
-        # Native ETH
+        # Native ETH Balance
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
         
-        # USDC (6 Decimals)
+        # USDC Balance (6 Decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw) / 1_000_000 
         
-        print(f"🎯 CORRECT WALLET: {vault_addr} | ETH: {eth_bal} | USDC: {usdc_bal}")
+        print(f"🎯 LIVE VAULT: {vault_addr} | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
         
         return {
             "eth": f"{eth_bal:.4f}",
@@ -101,7 +107,6 @@ def save_to_db(aave_rate, uni_rate):
         conn.commit()
         cur.close()
         conn.close()
-        print(f"✅ DB SYNC: Aave {aave_rate}% | Uni {uni_rate}%")
     except Exception as e:
         print(f"❌ DB FAILED: {e}")
 
