@@ -16,7 +16,6 @@ VAULT_ADDR = os.getenv("BANKER_VAULT_ADDRESS")
 AAVE_DATA_PROVIDER = "0x0a1677c790757d906141a0172e817a020188bECD"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
-# Minimal ABI: Aave V3 getReserveData returns a specific tuple
 AAVE_ABI = [
     {
         "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
@@ -27,7 +26,7 @@ AAVE_ABI = [
             {"internalType": "uint256", "name": "totalAToken", "type": "uint256"},
             {"internalType": "uint256", "name": "totalStableDebt", "type": "uint256"},
             {"internalType": "uint256", "name": "totalVariableDebt", "type": "uint256"},
-            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"}, # APY
             {"internalType": "uint256", "name": "variableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "averageStableBorrowRate", "type": "uint256"},
@@ -42,39 +41,31 @@ AAVE_ABI = [
 
 def get_aave_yield():
     try:
-        # 1. Initialize Web3
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        # v7 syntax for Base/L2 compatibility
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         
-        # 2. Check Connection
         if not w3.is_connected():
-            print("❌ RPC Connection Failed")
             return 4.15
             
-        # 3. Contract Instance
-        contract = w3.eth.contract(
-            address=w3.to_checksum_address(AAVE_DATA_PROVIDER), 
-            abi=AAVE_ABI
-        )
+        contract = w3.eth.contract(address=w3.to_checksum_address(AAVE_DATA_PROVIDER), abi=AAVE_ABI)
         
-        # 4. Call Function
-        # getReserveData returns a tuple. Index 5 is liquidityRate (Deposit APY)
-        res = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
+        # getReserveData returns a tuple. Index 5 is liquidityRate.
+        # It's in RAY units (10^27).
+        data = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
         
-        # APY calculation: liquidityRate is in RAY (10^27)
-        # Formula: (Rate / 10^27) * 100
-        apy = (float(res[5]) / 1e27) * 100
+        apy = (float(data[5]) / 1e27) * 100
         print(f"📡 Aave Live Data: {round(apy, 2)}%")
         return round(apy, 2)
-        
     except Exception as e:
         print(f"⚠️ Aave Fetch Logic Error: {e}")
         return 4.15
 
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
+    conn = None
     try:
-        conn = psycopg2.connect(DB_URL)
+        conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO yields (aave_rate, uniswap_rate) VALUES (%s, %s)",
@@ -82,14 +73,15 @@ def save_to_db(aave_rate, uni_rate):
         )
         conn.commit()
         cur.close()
-        conn.close()
-        print(f"✅ DB UPDATE: Aave {aave_rate}% | Uni {uni_rate}%")
+        print(f"✅ DB UPDATE SUCCESS: Aave {aave_rate}% | Uni {uni_rate}%")
     except Exception as e:
         print(f"❌ DB Write Error: {e}")
+    finally:
+        if conn and not conn.closed: conn.close()
 
 def get_all_yields():
     aave_val = get_aave_yield()
-    uni_val = 3.50 # Placeholder for Uniswap V3 logic
+    uni_val = 3.50 # Real Uniswap math coming next
     save_to_db(aave_val, uni_val)
 
     return {
