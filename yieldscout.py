@@ -13,7 +13,39 @@ load_dotenv()
 # Primary RPC for Base (Yields)
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 # Public RPC for Ethereum Mainnet (to find your 2.64 ETH)
-ETH_MAINNET_RPC = "https://eth.llamarpc.com"
+# Change this line:
+ETH_MAINNET_RPC = "https://cloudflare-eth.com"
+
+# And let's add a small print here so we can SEE if it's failing in the logs:
+def get_wallet_balances():
+    try:
+        base_w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC))
+        
+        vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
+        
+        # Check Base
+        base_eth = float(base_w3.from_wei(base_w3.eth.get_balance(vault_addr), 'ether'))
+        
+        # Check Mainnet
+        try:
+            mainnet_eth = float(eth_w3.from_wei(eth_w3.eth.get_balance(vault_addr), 'ether'))
+        except Exception as e:
+            print(f"⚠️ Mainnet Check Failed: {e}")
+            mainnet_eth = 0.0
+            
+        # USDC (Base)
+        usdc_raw = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI).functions.balanceOf(vault_addr).call()
+        usdc_bal = float(usdc_raw) / 1_000_000 
+        
+        # THIS IS THE MOMENT OF TRUTH:
+        total_eth = base_eth + mainnet_eth
+        print(f"💰 BALANCE SYNC -> Base: {base_eth} | Mainnet: {mainnet_eth} | Total: {total_eth}")
+        
+        return {"eth": f"{total_eth:.4f}", "usdc": f"{usdc_bal:.2f}"}
+    except Exception as e:
+        print(f"❌ Global Balance Error: {e}")
+        return {"eth": "0.0000", "usdc": "0.00"}
 DB_URL = os.getenv("DATABASE_URL")
 BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
 
