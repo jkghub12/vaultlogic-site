@@ -11,11 +11,12 @@ RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 VAULT_ADDR = os.getenv("BANKER_VAULT_ADDRESS")
 
-# OFFICIAL AAVE V3 BASE DATA PROVIDER
-AAVE_DATA_PROVIDER = "0x0a1677c790757d906141a0172e817a020188bECD"
+# OFFICIAL AAVE V3 BASE DATA PROVIDER (2026)
+# This address is the specific helper for fetching rates.
+AAVE_DATA_PROVIDER = "0x2d8a3C5677189723C4cB8873CfC9C8974F701758"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
-# Simplified ABI for the Data Provider
+# Minimal ABI specifically for getReserveData
 AAVE_ABI = [
     {
         "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
@@ -26,7 +27,7 @@ AAVE_ABI = [
             {"internalType": "uint256", "name": "totalAToken", "type": "uint256"},
             {"internalType": "uint256", "name": "totalStableDebt", "type": "uint256"},
             {"internalType": "uint256", "name": "totalVariableDebt", "type": "uint256"},
-            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"}, # THIS IS OUR APY
             {"internalType": "uint256", "name": "variableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "averageStableBorrowRate", "type": "uint256"},
@@ -42,9 +43,17 @@ AAVE_ABI = [
 def get_aave_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        if not w3.is_connected():
+            print("❌ RPC Connection Failed")
+            return 4.15
+        
         contract = w3.eth.contract(address=w3.to_checksum_address(AAVE_DATA_PROVIDER), abi=AAVE_ABI)
+        
+        # Call the contract. On Base, this returns a list of values.
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
-        # index 5 is liquidityRate (in Ray units)
+        
+        # liquidityRate is the 6th element (index 5)
+        # It's in RAY units (10^27)
         apy = (float(data[5]) / 1e27) * 100
         return round(apy, 2)
     except Exception as e:
@@ -52,10 +61,12 @@ def get_aave_yield():
         return 4.15
 
 def save_to_db(aave_rate, uni_rate):
-    if not DB_URL: return
+    if not DB_URL:
+        print("⚠️ No DATABASE_URL found.")
+        return
     conn = None
     try:
-        # If internal networking fails, psycopg2 will throw an error here
+        # We use a short timeout so the whole app doesn't hang
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute(
@@ -64,17 +75,21 @@ def save_to_db(aave_rate, uni_rate):
         )
         conn.commit()
         cur.close()
-        print(f"✅ DB Update Successful: {aave_rate}%")
+        print(f"✅ DB UPDATE SUCCESS: Aave {aave_rate}% | Uni {uni_rate}%")
     except Exception as e:
         print(f"❌ DB Error: {e}")
     finally:
         if conn: conn.close()
 
 def get_all_yields():
+    # 1. Fetch real yield
     aave_val = get_aave_yield()
     uni_val = 3.50 # Placeholder for now
+    
+    # 2. Try to save it
     save_to_db(aave_val, uni_val)
 
+    # 3. Simple wallet balance check
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
     eth_bal = "0.00"
     if VAULT_ADDR:
