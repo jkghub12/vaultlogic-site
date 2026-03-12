@@ -15,6 +15,10 @@ DB_URL = os.getenv("DATABASE_URL")
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
 USDC_ADDR = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
+# Uniswap V3 USDC/ETH 0.05% Pool on Base
+UNI_POOL_ADDRESS = "0x4C36388bE6F416A29C8d8Eee81c771cE6bE14B18"
+
+# ABIs
 AAVE_ABI = [{
     "inputs": [{"name": "asset", "type": "address"}],
     "name": "getReserveData",
@@ -36,6 +40,14 @@ AAVE_ABI = [{
     "type": "function"
 }]
 
+UNI_POOL_ABI = [
+    {"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
+]
+
+# Tracking variables for Uniswap Delta
+last_fee_growth = None
+last_check_time = None
+
 def get_aave_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -48,14 +60,47 @@ def get_aave_yield():
         print(f"⚠️ Aave Error: {e}")
         return 4.15
 
+def get_uniswap_yield():
+    global last_fee_growth, last_check_time
+    try:
+        w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        
+        pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
+        current_fees = pool.functions.feeGrowthGlobal0X128().call()
+        current_time = time.time()
+        
+        if last_fee_growth is None:
+            last_fee_growth = current_fees
+            last_check_time = current_time
+            return 3.50 # Initial baseline
+        
+        # Calculate Delta
+        fee_delta = current_fees - last_fee_growth
+        time_delta = current_time - last_check_time
+        
+        # Extrapolate Fee Growth to APY
+        if fee_delta > 0 and time_delta > 0:
+            annual_scaling = (365 * 24 * 3600) / time_delta
+            # Convert X128 growth to percentage (Simplified LP math)
+            raw_yield = (fee_delta / (2**128)) * annual_scaling * 100 
+            estimated_apy = max(0.1, min(raw_yield, 50.0))
+        else:
+            estimated_apy = 3.50
+
+        last_fee_growth = current_fees
+        last_check_time = current_time
+        return round(estimated_apy, 2)
+    except Exception as e:
+        print(f"⚠️ Uni Error: {e}")
+        return 3.50
+
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
     conn = None
     try:
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
-        
-        # We now explicitly define the 'timestamp' column as a TIMESTAMP type
         cur.execute("""
             CREATE TABLE IF NOT EXISTS yields (
                 id SERIAL PRIMARY KEY,
@@ -64,42 +109,6 @@ def save_to_db(aave_rate, uni_rate):
                 timestamp TIMESTAMP
             );
         """)
-        
-        # Sending datetime.now() ensures Python's time is recorded
         current_time = datetime.now()
         cur.execute(
-            "INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)",
-            (float(aave_rate), float(uni_rate), current_time)
-        )
-        conn.commit()
-        cur.close()
-        print(f"✅ DB SYNC SUCCESS [{current_time.strftime('%H:%M:%S')}]: {aave_rate}%")
-    except Exception as e:
-        print(f"❌ DB CONNECTION FAILED: {e}")
-    finally:
-        if conn: conn.close()
-
-def heartbeat_worker():
-    """ This runs in the background to keep the DB fresh! """
-    print("💓 VaultLogic Heartbeat Started...")
-    while True:
-        aave_val = get_aave_yield()
-        save_to_db(aave_val, 3.50)
-        # Sleep for 5 minutes (300 seconds)
-        time.sleep(300)
-
-def start_heartbeat():
-    # Start the worker thread so it doesn't block the API
-    thread = threading.Thread(target=heartbeat_worker, daemon=True)
-    thread.start()
-
-def get_all_yields():
-    # This is what the website sees
-    aave_val = get_aave_yield()
-    return {
-        "yields": [
-            {"protocol": "Aave V3", "yield": f"{aave_val}%", "asset": "USDC"},
-            {"protocol": "Uniswap V3", "yield": "3.50%", "asset": "USDC/ETH"}
-        ],
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+            "INSERT INTO yields (aave_rate
