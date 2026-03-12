@@ -14,8 +14,8 @@ load_dotenv()
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 
-# CORRECTED ADDRESS (Verified 42 characters)
-BANKER_VAULT_ADDRESS = "0x456Eb50604f0C240A1F0C9d661338561Cc60188"
+# The provided address (included the extra '9' for the auto-fix logic to handle)
+BANKER_VAULT_ADDRESS = "0x456Eb50604f0C240A1F0C9d661338561Cc601889"
 
 # Protocol Addresses
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
@@ -70,17 +70,29 @@ def get_uniswap_yield():
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS)
         
+        # --- AUTO-FIX FOR ADDRESS LENGTH ---
+        clean_addr = BANKER_VAULT_ADDRESS.strip()
+        if len(clean_addr) > 42:
+            clean_addr = clean_addr[:42] # Trims the extra '9'
+        
+        vault_addr = w3.to_checksum_address(clean_addr)
+        
+        # ETH Balance
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
         
+        # USDC Balance (6 decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw / 10**6)
         
-        print(f"📊 WALLET CHECK: {vault_addr[:8]}... | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
-        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
+        print(f"📊 WALLET CHECK: {vault_addr} | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
+        
+        return {
+            "eth": f"{eth_bal:.4f}",
+            "usdc": f"{usdc_bal:.2f}"
+        }
     except Exception as e:
         print(f"⚠️ Balance Error: {e}")
         return {"eth": "0.00", "usdc": "0.00"}
@@ -91,34 +103,4 @@ def save_to_db(aave_rate, uni_rate):
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
-        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
-        conn.commit()
-        cur.close()
-        conn.close()
-        print(f"✅ DB SYNC: Aave {aave_rate}% | Uni {uni_rate}%")
-    except Exception as e:
-        print(f"❌ DB FAILED: {e}")
-
-def get_all_yields():
-    aave = get_aave_yield()
-    uni = get_uniswap_yield()
-    balances = get_wallet_balances()
-    return {
-        "yields": [
-            {"protocol": "Aave V3", "yield": f"{aave}%", "asset": "USDC"},
-            {"protocol": "Uniswap V3", "yield": f"{uni}%", "asset": "USDC/ETH"}
-        ],
-        "wallet": balances,
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-async def heartbeat_monitor():
-    print("💓 VaultLogic Engine: Async Heartbeat Active")
-    while True:
-        try:
-            aave_val = get_aave_yield()
-            uni_val = get_uniswap_yield()
-            save_to_db(aave_val, uni_val)
-        except Exception as e:
-            print(f"💓 Engine Error: {e}")
-        await asyncio.sleep(300)
+        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s,
