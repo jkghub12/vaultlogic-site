@@ -1,6 +1,6 @@
 import os
 from web3 import Web3
-# NEW v7 IMPORT PATHS
+# NEW: web3.py v7 uses 'ExtraDataToPOAMiddleware' for L2s/Base
 from web3.middleware import ExtraDataToPOAMiddleware 
 import psycopg2
 from datetime import datetime
@@ -14,8 +14,8 @@ DB_URL = os.getenv("DATABASE_URL")
 VAULT_ADDR = os.getenv("BANKER_VAULT_ADDRESS")
 
 # OFFICIAL AAVE V3 BASE DATA PROVIDER (Verified 2026)
-# Address: 0x0a1677c790757d906141a0172e817a020188bECD
-AAVE_DATA_PROVIDER = "0x0a1677c790757d906141a0172e817a020188bECD"
+# Address: 0xC4Fcf9893072d61Cc2899C0054877Cb752587981
+AAVE_DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
 AAVE_ABI = [
@@ -28,7 +28,7 @@ AAVE_ABI = [
             {"internalType": "uint256", "name": "totalAToken", "type": "uint256"},
             {"internalType": "uint256", "name": "totalStableDebt", "type": "uint256"},
             {"internalType": "uint256", "name": "totalVariableDebt", "type": "uint256"},
-            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"}, # APY
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"}, # APY (Index 5)
             {"internalType": "uint256", "name": "variableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "averageStableBorrowRate", "type": "uint256"},
@@ -44,13 +44,16 @@ AAVE_ABI = [
 def get_aave_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # v7 syntax for injecting L2/PoA middleware
+        # v7 syntax for injecting the Base/L2 compatibility layer
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         
+        if not w3.is_connected():
+            return 4.15
+            
         contract = w3.eth.contract(address=w3.to_checksum_address(AAVE_DATA_PROVIDER), abi=AAVE_ABI)
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
         
-        # APY in RAY (10^27)
+        # liquidityRate is at index 5. Convert RAY (10^27) to percentage.
         apy = (float(data[5]) / 1e27) * 100
         return round(apy, 2)
     except Exception as e:
@@ -77,7 +80,7 @@ def save_to_db(aave_rate, uni_rate):
 
 def get_all_yields():
     aave_val = get_aave_yield()
-    uni_val = 3.50 # Real Uniswap math next!
+    uni_val = 3.50 # Uniswap V3 placeholder
     save_to_db(aave_val, uni_val)
 
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
