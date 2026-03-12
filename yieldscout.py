@@ -75,31 +75,24 @@ def get_wallet_balances():
     
     return balances
 
-def save_to_db(aave_val, uni_val):
-    if not DB_URL:
+def save_to_db(aave_rate, uni_rate):
+    if not DB_URL: 
+        print("⚠️ No DATABASE_URL found.")
         return
     try:
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         
-        # Optimization: Table creation remains for safety but is standard
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS yields (
-                id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                aave_rate NUMERIC,
-                uniswap_rate NUMERIC
-            )
-        """)
-        
+        # We removed the CREATE TABLE line from here. 
+        # Now the script will only try to INSERT data.
         cur.execute(
-            "INSERT INTO yields (aave_rate, uniswap_rate) VALUES (%s, %s)",
-            (aave_val, uni_val)
+            "INSERT INTO yields (aave_rate, uniswap_rate) VALUES (%s, %s)", 
+            (aave_rate, uni_rate)
         )
+        
         conn.commit()
         cur.close()
         conn.close()
-        print(f"✅ DB Saved: Aave ({aave_val}%)")
     except Exception as e:
         print(f"❌ DB Error: {e}")
 
