@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIG ---
-# We use Base for Yields and the primary RPC
+# Primary RPC for Base (Yields)
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
-# We use a public Mainnet RPC just for the ETH balance check
+# Public RPC for Ethereum Mainnet (to find your 2.64 ETH)
 ETH_MAINNET_RPC = "https://eth.llamarpc.com"
 DB_URL = os.getenv("DATABASE_URL")
 BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
@@ -59,6 +59,7 @@ def get_uniswap_yield():
         
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
+            # Calculation based on estimated pool share
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05
             return round(max(0.5, min(raw_yield, 20.0)), 2)
         return 3.50
@@ -67,25 +68,27 @@ def get_uniswap_yield():
 
 def get_wallet_balances():
     try:
-        # Initialize both network connections
+        # 1. Connect to both networks
         base_w3 = Web3(Web3.HTTPProvider(RPC_URL))
         eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC))
         
+        # Clean address
         vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
         
-        # 1. Fetch ETH from Base
+        # 2. Get ETH from Base Network (The 0.0011 part)
         base_eth_wei = base_w3.eth.get_balance(vault_addr)
         base_eth = float(base_w3.from_wei(base_eth_wei, 'ether'))
         
-        # 2. Fetch ETH from Mainnet (This should find your 2.64)
+        # 3. Get ETH from Ethereum Mainnet (The 2.64 part)
         mainnet_eth_wei = eth_w3.eth.get_balance(vault_addr)
         mainnet_eth = float(eth_w3.from_wei(mainnet_eth_wei, 'ether'))
         
-        # 3. Fetch USDC from Base
+        # 4. Get USDC from Base
         usdc_contract = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw) / 1_000_000 
         
+        # Totaling the ETH from both networks
         total_eth = base_eth + mainnet_eth
         
         return {
@@ -93,7 +96,6 @@ def get_wallet_balances():
             "usdc": f"{usdc_bal:.2f}"
         }
     except Exception as e:
-        print(f"⚠️ Balance Scan Error: {e}")
         return {"eth": "0.0000", "usdc": "0.00"}
 
 def save_to_db(aave_rate, uni_rate):
@@ -106,8 +108,8 @@ def save_to_db(aave_rate, uni_rate):
         conn.commit()
         cur.close()
         conn.close()
-    except Exception as e:
-        print(f"❌ DB SAVE ERROR: {e}")
+    except Exception:
+        pass
 
 def get_all_yields():
     aave = get_aave_yield()
@@ -128,6 +130,6 @@ async def heartbeat_monitor():
             aave_val = get_aave_yield()
             uni_val = get_uniswap_yield()
             save_to_db(aave_val, uni_val)
-        except Exception as e:
-            print(f"💓 Heartbeat Error: {e}")
+        except Exception:
+            pass
         await asyncio.sleep(300)
