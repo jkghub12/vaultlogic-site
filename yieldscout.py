@@ -1,6 +1,6 @@
 import os
 import time
-import threading
+import asyncio
 from web3 import Web3
 from web3.middleware import ExtraDataToPOAMiddleware
 import psycopg2
@@ -14,37 +14,13 @@ RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
 USDC_ADDR = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-
-# Uniswap V3 USDC/ETH 0.05% Pool on Base
 UNI_POOL_ADDRESS = "0x4C36388bE6F416A29C8d8Eee81c771cE6bE14B18"
 
 # ABIs
-AAVE_ABI = [{
-    "inputs": [{"name": "asset", "type": "address"}],
-    "name": "getReserveData",
-    "outputs": [
-        {"name": "unbacked", "type": "uint256"},
-        {"name": "accruedToTreasuryScaled", "type": "uint256"},
-        {"name": "totalAToken", "type": "uint256"},
-        {"name": "totalStableDebt", "type": "uint256"},
-        {"name": "totalVariableDebt", "type": "uint256"},
-        {"name": "liquidityRate", "type": "uint256"},
-        {"name": "variableBorrowRate", "type": "uint256"},
-        {"name": "stableBorrowRate", "type": "uint256"},
-        {"name": "averageStableBorrowRate", "type": "uint256"},
-        {"name": "liquidityIndex", "type": "uint256"},
-        {"name": "variableBorrowIndex", "type": "uint256"},
-        {"name": "lastUpdateTimestamp", "type": "uint40"}
-    ],
-    "stateMutability": "view",
-    "type": "function"
-}]
+AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserveData","outputs": [{"name": "unbacked", "type": "uint256"},{"name": "accruedToTreasuryScaled", "type": "uint256"},{"name": "totalAToken", "type": "uint256"},{"name": "totalStableDebt", "type": "uint256"},{"name": "totalVariableDebt", "type": "uint256"},{"name": "liquidityRate", "type": "uint256"},{"name": "variableBorrowRate", "type": "uint256"},{"name": "stableBorrowRate", "type": "uint256"},{"name": "averageStableBorrowRate", "type": "uint256"},{"name": "liquidityIndex", "type": "uint256"},{"name": "variableBorrowIndex", "type": "uint256"},{"name": "lastUpdateTimestamp", "type": "uint40"}],"stateMutability": "view","type": "function"}]
+UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 
-UNI_POOL_ABI = [
-    {"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
-]
-
-# Tracking variables for Uniswap Delta
+# Global State for Uniswap
 last_fee_growth = None
 last_check_time = None
 
@@ -54,8 +30,7 @@ def get_aave_yield():
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         contract = w3.eth.contract(address=w3.to_checksum_address(DATA_PROVIDER), abi=AAVE_ABI)
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_ADDR)).call()
-        apy = (float(data[5]) / 1e27) * 100
-        return round(apy, 2)
+        return round((float(data[5]) / 1e27) * 100, 2)
     except Exception as e:
         print(f"⚠️ Aave Error: {e}")
         return 4.15
@@ -65,82 +40,60 @@ def get_uniswap_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-        
         pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
         current_fees = pool.functions.feeGrowthGlobal0X128().call()
         current_time = time.time()
         
         if last_fee_growth is None:
-            last_fee_growth = current_fees
-            last_check_time = current_time
-            return 3.50 # Initial baseline
+            last_fee_growth, last_check_time = current_fees, current_time
+            return 3.50
         
-        # Calculate Delta
         fee_delta = current_fees - last_fee_growth
         time_delta = current_time - last_check_time
         
-        # Extrapolate Fee Growth to APY
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            # Convert X128 growth to percentage (Simplified LP math)
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 100 
-            estimated_apy = max(0.1, min(raw_yield, 50.0))
-        else:
-            estimated_apy = 3.50
-
-        last_fee_growth = current_fees
-        last_check_time = current_time
-        return round(estimated_apy, 2)
+            return round(max(0.1, min(raw_yield, 50.0)), 2)
+        return 3.50
     except Exception as e:
         print(f"⚠️ Uni Error: {e}")
         return 3.50
 
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
-    conn = None
     try:
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS yields (
-                id SERIAL PRIMARY KEY,
-                aave_rate REAL,
-                uniswap_rate REAL,
-                timestamp TIMESTAMP
-            );
-        """)
-        current_time = datetime.now()
-        cur.execute(
-            "INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)",
-            (float(aave_rate), float(uni_rate), current_time)
-        )
+        cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
+        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
         conn.commit()
         cur.close()
-        print(f"✅ DB SYNC SUCCESS [{current_time.strftime('%H:%M:%S')}]: Aave {aave_rate}% | Uni {uni_rate}%")
+        conn.close()
+        print(f"✅ DB SYNC: Aave {aave_rate}% | Uni {uni_rate}%")
     except Exception as e:
-        print(f"❌ DB CONNECTION FAILED: {e}")
-    finally:
-        if conn: conn.close()
-
-def heartbeat_worker():
-    print("💓 VaultLogic Heartbeat Started...")
-    while True:
-        aave_val = get_aave_yield()
-        uni_val = get_uniswap_yield()
-        save_to_db(aave_val, uni_val)
-        time.sleep(300)
-
-def start_heartbeat():
-    thread = threading.Thread(target=heartbeat_worker, daemon=True)
-    thread.start()
+        print(f"❌ DB FAILED: {e}")
 
 def get_all_yields():
-    aave_val = get_aave_yield()
-    uni_val = get_uniswap_yield() 
+    aave = get_aave_yield()
+    uni = get_uniswap_yield()
     return {
         "yields": [
-            {"protocol": "Aave V3", "yield": f"{aave_val}%", "asset": "USDC"},
-            {"protocol": "Uniswap V3", "yield": f"{uni_val}%", "asset": "USDC/ETH"}
+            {"protocol": "Aave V3", "yield": f"{aave}%", "asset": "USDC"},
+            {"protocol": "Uniswap V3", "yield": f"{uni}%", "asset": "USDC/ETH"}
         ],
+        "wallet": {"eth": "0.00", "usdc": "0.00"}, # Placeholder
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+
+async def heartbeat_monitor():
+    """ The new bulletproof background task """
+    print("💓 VaultLogic Engine: Async Heartbeat Active")
+    while True:
+        try:
+            aave_val = get_aave_yield()
+            uni_val = get_uniswap_yield()
+            save_to_db(aave_val, uni_val)
+        except Exception as e:
+            print(f"💓 Engine Error: {e}")
+        await asyncio.sleep(300) # Sync every 5 minutes
