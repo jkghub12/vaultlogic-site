@@ -65,17 +65,27 @@ def get_uniswap_yield():
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        # 1. Clean address
         clean_addr = BANKER_VAULT_ADDRESS.strip()
         if len(clean_addr) > 42:
             clean_addr = clean_addr[:42]
         vault_addr = w3.to_checksum_address(clean_addr)
+        
+        # 2. Get Native ETH Balance
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
+        
+        # 3. Get USDC Balance (6 Decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
-        usdc_bal = float(usdc_raw / 10**6)
-        print(f"📊 WALLET CHECK: {vault_addr} | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
-        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
+        usdc_bal = float(usdc_raw) / 1_000_000 
+        
+        print(f"🕵️ DEEP SCAN: {vault_addr} | ETH: {eth_bal:.6f} | USDC: {usdc_bal:.2f}")
+        
+        return {
+            "eth": f"{eth_bal:.4f}",
+            "usdc": f"{usdc_bal:.2f}"
+        }
     except Exception as e:
         print(f"⚠️ Balance Error: {e}")
         return {"eth": "0.00", "usdc": "0.00"}
