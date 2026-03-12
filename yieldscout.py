@@ -13,8 +13,6 @@ load_dotenv()
 # --- CONFIG ---
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
-
-# The provided address (included the extra '9' for the auto-fix logic to handle)
 BANKER_VAULT_ADDRESS = "0x456Eb50604f0C240A1F0C9d661338561Cc601889"
 
 # Protocol Addresses
@@ -27,7 +25,7 @@ AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserv
 UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 ERC20_ABI = [{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
 
-# Global State for Uniswap
+# Global State
 last_fee_growth = None
 last_check_time = None
 
@@ -50,14 +48,11 @@ def get_uniswap_yield():
         pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
         current_fees = pool.functions.feeGrowthGlobal0X128().call()
         current_time = time.time()
-        
         if last_fee_growth is None:
             last_fee_growth, last_check_time = current_fees, current_time
             return 3.50
-        
         fee_delta = current_fees - last_fee_growth
         time_delta = current_time - last_check_time
-        
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.1
@@ -70,29 +65,17 @@ def get_uniswap_yield():
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        
-        # --- AUTO-FIX FOR ADDRESS LENGTH ---
         clean_addr = BANKER_VAULT_ADDRESS.strip()
         if len(clean_addr) > 42:
-            clean_addr = clean_addr[:42] # Trims the extra '9'
-        
+            clean_addr = clean_addr[:42]
         vault_addr = w3.to_checksum_address(clean_addr)
-        
-        # ETH Balance
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
-        
-        # USDC Balance (6 decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw / 10**6)
-        
         print(f"📊 WALLET CHECK: {vault_addr} | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
-        
-        return {
-            "eth": f"{eth_bal:.4f}",
-            "usdc": f"{usdc_bal:.2f}"
-        }
+        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
     except Exception as e:
         print(f"⚠️ Balance Error: {e}")
         return {"eth": "0.00", "usdc": "0.00"}
@@ -103,4 +86,35 @@ def save_to_db(aave_rate, uni_rate):
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
-        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s,
+        sql = "INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)"
+        cur.execute(sql, (float(aave_rate), float(uni_rate), datetime.now()))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"✅ DB SYNC: Aave {aave_rate}% | Uni {uni_rate}%")
+    except Exception as e:
+        print(f"❌ DB FAILED: {e}")
+
+def get_all_yields():
+    aave = get_aave_yield()
+    uni = get_uniswap_yield()
+    balances = get_wallet_balances()
+    return {
+        "yields": [
+            {"protocol": "Aave V3", "yield": f"{aave}%", "asset": "USDC"},
+            {"protocol": "Uniswap V3", "yield": f"{uni}%", "asset": "USDC/ETH"}
+        ],
+        "wallet": balances,
+        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+async def heartbeat_monitor():
+    print("💓 VaultLogic Engine: Async Heartbeat Active")
+    while True:
+        try:
+            aave_val = get_aave_yield()
+            uni_val = get_uniswap_yield()
+            save_to_db(aave_val, uni_val)
+        except Exception as e:
+            print(f"💓 Engine Error: {e}")
+        await asyncio.sleep(300)
