@@ -84,6 +84,7 @@ DASHBOARD_HTML = """
 <head>
     <title>VaultLogic Banker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-[#050a14] text-slate-200 flex flex-col items-center justify-center min-h-screen p-6">
     <div class="max-w-md w-full bg-slate-900/80 backdrop-blur-md rounded-3xl p-8 border border-white/10 shadow-2xl">
@@ -95,9 +96,13 @@ DASHBOARD_HTML = """
             </div>
         </div>
         
+        <div class="mb-6 bg-black/40 p-4 rounded-2xl border border-slate-800">
+            <canvas id="yieldChart" height="150"></canvas>
+        </div>
+
         <div class="space-y-4">
             <div class="bg-black/40 p-6 rounded-2xl border border-slate-800 text-center">
-                <p class="text-[10px] text-slate-500 uppercase mb-1">Target Yield (Aave V3)</p>
+                <p class="text-[10px] text-slate-500 uppercase mb-1">Current USDC Yield (Aave)</p>
                 <h2 id="aave-yield" class="text-5xl font-mono font-bold text-green-400">--%</h2>
             </div>
             <div class="grid grid-cols-2 gap-4">
@@ -117,17 +122,67 @@ DASHBOARD_HTML = """
     </div>
 
     <script>
+        // Initialize Chart
+        const ctx = document.getElementById('yieldChart').getContext('2d');
+        const yieldChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps
+                datasets: [{
+                    label: 'USDC Yield %',
+                    data: [],
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#475569', font: { size: 10 } }
+                    }
+                }
+            }
+        });
+
         async function update() {
             try {
                 const res = await fetch('/api/yield');
                 const d = await res.json();
-                document.getElementById('aave-yield').innerText = d.yields[0].yield;
+                
+                const currentYieldStr = d.yields[0].yield;
+                const currentYieldNum = parseFloat(currentYieldStr.replace('%', ''));
+
+                // Update UI Text
+                document.getElementById('aave-yield').innerText = currentYieldStr;
                 document.getElementById('eth-bal').innerText = d.wallet.eth.substring(0,6);
                 document.getElementById('usdc-bal').innerText = d.wallet.usdc || "0.00";
                 document.getElementById('timestamp').innerText = d.last_updated;
+
+                // Update Chart Data
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                yieldChart.data.labels.push(now);
+                yieldChart.data.datasets[0].data.push(currentYieldNum);
+
+                // Keep only last 20 data points for performance
+                if(yieldChart.data.labels.length > 20) {
+                    yieldChart.data.labels.shift();
+                    yieldChart.data.datasets[0].data.shift();
+                }
+                yieldChart.update();
+
             } catch (e) { console.error(e); }
         }
-        update(); setInterval(update, 30000);
+
+        update(); 
+        setInterval(update, 30000);
     </script>
 </body>
 </html>
@@ -150,4 +205,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-#Version 1
+#Version 2
