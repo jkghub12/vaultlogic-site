@@ -111,4 +111,36 @@ def save_to_db(aave_rate, uni_rate):
         """)
         current_time = datetime.now()
         cur.execute(
-            "INSERT INTO yields (aave_rate
+            "INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)",
+            (float(aave_rate), float(uni_rate), current_time)
+        )
+        conn.commit()
+        cur.close()
+        print(f"✅ DB SYNC SUCCESS [{current_time.strftime('%H:%M:%S')}]: Aave {aave_rate}% | Uni {uni_rate}%")
+    except Exception as e:
+        print(f"❌ DB CONNECTION FAILED: {e}")
+    finally:
+        if conn: conn.close()
+
+def heartbeat_worker():
+    print("💓 VaultLogic Heartbeat Started...")
+    while True:
+        aave_val = get_aave_yield()
+        uni_val = get_uniswap_yield()
+        save_to_db(aave_val, uni_val)
+        time.sleep(300)
+
+def start_heartbeat():
+    thread = threading.Thread(target=heartbeat_worker, daemon=True)
+    thread.start()
+
+def get_all_yields():
+    aave_val = get_aave_yield()
+    uni_val = get_uniswap_yield() 
+    return {
+        "yields": [
+            {"protocol": "Aave V3", "yield": f"{aave_val}%", "asset": "USDC"},
+            {"protocol": "Uniswap V3", "yield": f"{uni_val}%", "asset": "USDC/ETH"}
+        ],
+        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
