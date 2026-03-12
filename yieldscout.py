@@ -1,5 +1,7 @@
 import os
 from web3 import Web3
+# NEW v7 IMPORT PATHS
+from web3.middleware import ExtraDataToPOAMiddleware 
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
@@ -11,13 +13,11 @@ RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 VAULT_ADDR = os.getenv("BANKER_VAULT_ADDRESS")
 
-# OFFICIAL AAVE V3 BASE ADDRESSES (Verified 2026)
-# ProtocolDataProvider: 0xC4Fcf9893072d61Cc2899C0054877Cb752587981
-# USDC on Base: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-AAVE_DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
+# OFFICIAL AAVE V3 BASE DATA PROVIDER (Verified 2026)
+# Address: 0x0a1677c790757d906141a0172e817a020188bECD
+AAVE_DATA_PROVIDER = "0x0a1677c790757d906141a0172e817a020188bECD"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
-# Minimal, Clean ABI for Data Provider
 AAVE_ABI = [
     {
         "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
@@ -28,7 +28,7 @@ AAVE_ABI = [
             {"internalType": "uint256", "name": "totalAToken", "type": "uint256"},
             {"internalType": "uint256", "name": "totalStableDebt", "type": "uint256"},
             {"internalType": "uint256", "name": "totalVariableDebt", "type": "uint256"},
-            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"}, # APY
             {"internalType": "uint256", "name": "variableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
             {"internalType": "uint256", "name": "averageStableBorrowRate", "type": "uint256"},
@@ -44,14 +44,13 @@ AAVE_ABI = [
 def get_aave_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # Add Middleware for Layer 2s (Base)
-        from web3.middleware import ExtraDataToExternalDataMiddleware
-        w3.middleware_onion.inject(ExtraDataToExternalDataMiddleware, layer=0)
+        # v7 syntax for injecting L2/PoA middleware
+        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         
         contract = w3.eth.contract(address=w3.to_checksum_address(AAVE_DATA_PROVIDER), abi=AAVE_ABI)
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
         
-        # liquidityRate is index 5. Convert RAY (10^27) to percentage.
+        # APY in RAY (10^27)
         apy = (float(data[5]) / 1e27) * 100
         return round(apy, 2)
     except Exception as e:
@@ -62,8 +61,7 @@ def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
     conn = None
     try:
-        # If you are on Railway, ensure DATABASE_URL is correct in Variables
-        conn = psycopg2.connect(DB_URL)
+        conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO yields (aave_rate, uniswap_rate) VALUES (%s, %s)",
@@ -71,7 +69,7 @@ def save_to_db(aave_rate, uni_rate):
         )
         conn.commit()
         cur.close()
-        print(f"✅ DB UPDATE SUCCESS: Aave {aave_rate}%")
+        print(f"✅ DB UPDATE SUCCESS: Aave {aave_rate}% | Uni {uni_rate}%")
     except Exception as e:
         print(f"❌ DB Error: {e}")
     finally:
@@ -79,7 +77,7 @@ def save_to_db(aave_rate, uni_rate):
 
 def get_all_yields():
     aave_val = get_aave_yield()
-    uni_val = 3.50 
+    uni_val = 3.50 # Real Uniswap math next!
     save_to_db(aave_val, uni_val)
 
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
