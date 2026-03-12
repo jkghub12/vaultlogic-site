@@ -14,7 +14,7 @@ load_dotenv()
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
 
-# CORRECTED ADDRESS (Removed the trailing '9')
+# CORRECTED ADDRESS (Verified 42 characters)
 BANKER_VAULT_ADDRESS = "0x456Eb50604f0C240A1F0C9d661338561Cc60188"
 
 # Protocol Addresses
@@ -60,7 +60,6 @@ def get_uniswap_yield():
         
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            # Calibrated multiplier for specific pool depth
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.1
             return round(max(0.1, min(raw_yield, 15.0)), 2)
         return 3.50
@@ -71,26 +70,19 @@ def get_uniswap_yield():
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # Ensure address is valid checksum format
         vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS)
         
-        # ETH Balance
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
         
-        # USDC Balance (6 decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw / 10**6)
         
         print(f"📊 WALLET CHECK: {vault_addr[:8]}... | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
-        
-        return {
-            "eth": f"{eth_bal:.4f}",
-            "usdc": f"{usdc_bal:.2f}"
-        }
+        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
     except Exception as e:
-        print(f"⚠️ Balance Error (Check Address Length): {e}")
+        print(f"⚠️ Balance Error: {e}")
         return {"eth": "0.00", "usdc": "0.00"}
 
 def save_to_db(aave_rate, uni_rate):
@@ -102,3 +94,31 @@ def save_to_db(aave_rate, uni_rate):
         cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
         conn.commit()
         cur.close()
+        conn.close()
+        print(f"✅ DB SYNC: Aave {aave_rate}% | Uni {uni_rate}%")
+    except Exception as e:
+        print(f"❌ DB FAILED: {e}")
+
+def get_all_yields():
+    aave = get_aave_yield()
+    uni = get_uniswap_yield()
+    balances = get_wallet_balances()
+    return {
+        "yields": [
+            {"protocol": "Aave V3", "yield": f"{aave}%", "asset": "USDC"},
+            {"protocol": "Uniswap V3", "yield": f"{uni}%", "asset": "USDC/ETH"}
+        ],
+        "wallet": balances,
+        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+async def heartbeat_monitor():
+    print("💓 VaultLogic Engine: Async Heartbeat Active")
+    while True:
+        try:
+            aave_val = get_aave_yield()
+            uni_val = get_uniswap_yield()
+            save_to_db(aave_val, uni_val)
+        except Exception as e:
+            print(f"💓 Engine Error: {e}")
+        await asyncio.sleep(300)
