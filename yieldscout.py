@@ -10,42 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIG ---
-# Primary RPC for Base (Yields)
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
-# Public RPC for Ethereum Mainnet (to find your 2.64 ETH)
-# Change this line:
 ETH_MAINNET_RPC = "https://cloudflare-eth.com"
-
-# And let's add a small print here so we can SEE if it's failing in the logs:
-def get_wallet_balances():
-    try:
-        base_w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC))
-        
-        vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
-        
-        # Check Base
-        base_eth = float(base_w3.from_wei(base_w3.eth.get_balance(vault_addr), 'ether'))
-        
-        # Check Mainnet
-        try:
-            mainnet_eth = float(eth_w3.from_wei(eth_w3.eth.get_balance(vault_addr), 'ether'))
-        except Exception as e:
-            print(f"⚠️ Mainnet Check Failed: {e}")
-            mainnet_eth = 0.0
-            
-        # USDC (Base)
-        usdc_raw = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI).functions.balanceOf(vault_addr).call()
-        usdc_bal = float(usdc_raw) / 1_000_000 
-        
-        # THIS IS THE MOMENT OF TRUTH:
-        total_eth = base_eth + mainnet_eth
-        print(f"💰 BALANCE SYNC -> Base: {base_eth} | Mainnet: {mainnet_eth} | Total: {total_eth}")
-        
-        return {"eth": f"{total_eth:.4f}", "usdc": f"{usdc_bal:.2f}"}
-    except Exception as e:
-        print(f"❌ Global Balance Error: {e}")
-        return {"eth": "0.0000", "usdc": "0.00"}
 DB_URL = os.getenv("DATABASE_URL")
 BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
 
@@ -91,7 +57,6 @@ def get_uniswap_yield():
         
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            # Calculation based on estimated pool share
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05
             return round(max(0.5, min(raw_yield, 20.0)), 2)
         return 3.50
@@ -100,34 +65,39 @@ def get_uniswap_yield():
 
 def get_wallet_balances():
     try:
-        # 1. Connect to both networks
-        base_w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC))
+        # Connect to both networks with timeouts to prevent hanging
+        base_w3 = Web3(Web3.HTTPProvider(RPC_URL, request_kwargs={'timeout': 10}))
+        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC, request_kwargs={'timeout': 10}))
         
-        # Clean address
         vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
         
-        # 2. Get ETH from Base Network (The 0.0011 part)
-        base_eth_wei = base_w3.eth.get_balance(vault_addr)
-        base_eth = float(base_w3.from_wei(base_eth_wei, 'ether'))
+        # Check Base Network
+        try:
+            base_eth = float(base_w3.from_wei(base_w3.eth.get_balance(vault_addr), 'ether'))
+        except:
+            base_eth = 0.0
+
+        # Check Ethereum Mainnet (where the 2.64 ETH lives)
+        try:
+            mainnet_eth = float(eth_w3.from_wei(eth_w3.eth.get_balance(vault_addr), 'ether'))
+        except Exception as e:
+            print(f"⚠️ Mainnet Check Failed: {e}")
+            mainnet_eth = 0.0
+            
+        # USDC (Base)
+        try:
+            usdc_contract = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
+            usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
+            usdc_bal = float(usdc_raw) / 1_000_000
+        except:
+            usdc_bal = 0.0
         
-        # 3. Get ETH from Ethereum Mainnet (The 2.64 part)
-        mainnet_eth_wei = eth_w3.eth.get_balance(vault_addr)
-        mainnet_eth = float(eth_w3.from_wei(mainnet_eth_wei, 'ether'))
-        
-        # 4. Get USDC from Base
-        usdc_contract = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
-        usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
-        usdc_bal = float(usdc_raw) / 1_000_000 
-        
-        # Totaling the ETH from both networks
         total_eth = base_eth + mainnet_eth
+        print(f"💰 BALANCE SYNC -> Base: {base_eth} | Mainnet: {mainnet_eth} | Total: {total_eth}")
         
-        return {
-            "eth": f"{total_eth:.4f}",
-            "usdc": f"{usdc_bal:.2f}"
-        }
+        return {"eth": f"{total_eth:.4f}", "usdc": f"{usdc_bal:.2f}"}
     except Exception as e:
+        print(f"❌ Global Balance Error: {e}")
         return {"eth": "0.0000", "usdc": "0.00"}
 
 def save_to_db(aave_rate, uni_rate):
