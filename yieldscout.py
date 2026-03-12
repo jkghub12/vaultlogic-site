@@ -12,7 +12,7 @@ DB_URL = os.getenv("DATABASE_URL")
 VAULT_ADDR = os.getenv("BANKER_VAULT_ADDRESS")
 
 # OFFICIAL AAVE V3 BASE DATA PROVIDER (2026)
-# Verified: 0x0a1677c790757d906141a0172e817a020188bECD
+# This is the dedicated contract for fetching reserve data/rates.
 AAVE_DATA_PROVIDER = "0x0a1677c790757d906141a0172e817a020188bECD"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
@@ -42,23 +42,23 @@ AAVE_ABI = [
 def get_aave_yield():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # Use the Data Provider address directly
+        # Ensure address is in checksum format
         contract = w3.eth.contract(address=w3.to_checksum_address(AAVE_DATA_PROVIDER), abi=AAVE_ABI)
+        
+        # Call the contract. Returns a tuple where index 5 is liquidityRate.
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_BASE)).call()
         
-        # liquidityRate is the 6th return value (index 5)
-        # It's in RAY units (10^27)
+        # APY is in RAY units (10^27)
         apy = (float(data[5]) / 1e27) * 100
         return round(apy, 2)
     except Exception as e:
         print(f"⚠️ Aave Fetch failed: {e}")
-        return 4.15
+        return 4.15 # Fallback
 
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
     conn = None
     try:
-        # Connect using the Public Proxy URL or ${{Postgres.DATABASE_URL}}
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         cur.execute(
@@ -75,7 +75,7 @@ def save_to_db(aave_rate, uni_rate):
 
 def get_all_yields():
     aave_val = get_aave_yield()
-    uni_val = 3.50 # Real Uniswap logic coming next!
+    uni_val = 3.50 # Placeholder for Uniswap V3
     
     save_to_db(aave_val, uni_val)
 
