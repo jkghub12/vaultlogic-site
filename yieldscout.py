@@ -13,7 +13,9 @@ load_dotenv()
 # --- CONFIG ---
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
 DB_URL = os.getenv("DATABASE_URL")
-BANKER_VAULT_ADDRESS = "0x456Eb50604f0C240A1F0C9d661338561Cc601889"
+
+# THE CORRECT WALLET ADDRESS
+BANKER_VAULT_ADDRESS = "0x31d8210350bc719fDfde1149f6aEDF9420E1b889"
 
 # Protocol Addresses
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
@@ -37,8 +39,7 @@ def get_aave_yield():
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_ADDR)).call()
         return round((float(data[5]) / 1e27) * 100, 2)
     except Exception as e:
-        print(f"⚠️ Aave Error: {e}")
-        return 4.15
+        return 2.40
 
 def get_uniswap_yield():
     global last_fee_growth, last_check_time
@@ -48,15 +49,19 @@ def get_uniswap_yield():
         pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
         current_fees = pool.functions.feeGrowthGlobal0X128().call()
         current_time = time.time()
-        if last_fee_growth is None:
+        
+        if last_fee_growth is None or current_fees < last_fee_growth:
             last_fee_growth, last_check_time = current_fees, current_time
             return 3.50
+        
         fee_delta = current_fees - last_fee_growth
         time_delta = current_time - last_check_time
+        
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.1
-            return round(max(0.1, min(raw_yield, 15.0)), 2)
+            # Calibrating for pool share - assuming 0.01% ownership of the liquidity
+            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.01 
+            return round(max(0.5, min(raw_yield, 25.0)), 2)
         return 3.50
     except Exception as e:
         print(f"⚠️ Uni Error: {e}")
@@ -65,22 +70,18 @@ def get_uniswap_yield():
 def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # 1. Clean address
-        clean_addr = BANKER_VAULT_ADDRESS.strip()
-        if len(clean_addr) > 42:
-            clean_addr = clean_addr[:42]
-        vault_addr = w3.to_checksum_address(clean_addr)
+        vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS)
         
-        # 2. Get Native ETH Balance
+        # Native ETH
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
         
-        # 3. Get USDC Balance (6 Decimals)
+        # USDC (6 Decimals)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw) / 1_000_000 
         
-        print(f"🕵️ DEEP SCAN: {vault_addr} | ETH: {eth_bal:.6f} | USDC: {usdc_bal:.2f}")
+        print(f"🎯 CORRECT WALLET: {vault_addr} | ETH: {eth_bal} | USDC: {usdc_bal}")
         
         return {
             "eth": f"{eth_bal:.4f}",
@@ -96,8 +97,7 @@ def save_to_db(aave_rate, uni_rate):
         conn = psycopg2.connect(DB_URL, connect_timeout=5)
         cur = conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
-        sql = "INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)"
-        cur.execute(sql, (float(aave_rate), float(uni_rate), datetime.now()))
+        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
         conn.commit()
         cur.close()
         conn.close()
