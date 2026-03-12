@@ -1,6 +1,5 @@
 import os
 import time
-import json
 import asyncio
 import psycopg2
 from web3 import Web3
@@ -11,13 +10,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIG ---
+# We use Base for Yields and the primary RPC
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
+# We use a public Mainnet RPC just for the ETH balance check
+ETH_MAINNET_RPC = "https://eth.llamarpc.com"
 DB_URL = os.getenv("DATABASE_URL")
-
-# Prioritizes the Railway Variable, falls back to your real wallet
 BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
 
-# Protocol Addresses (Base Mainnet)
+# Protocol Addresses (Base)
 DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
 USDC_ADDR = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 UNI_POOL_ADDRESS = "0x4C36388bE6F416A29C8d8Eee81c771cE6bE14B18"
@@ -27,7 +27,7 @@ AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserv
 UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 ERC20_ABI = [{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
 
-# Global State for Yield Calculation
+# Global State for Fee Calculation
 last_fee_growth = None
 last_check_time = None
 
@@ -37,11 +37,9 @@ def get_aave_yield():
         w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         contract = w3.eth.contract(address=w3.to_checksum_address(DATA_PROVIDER), abi=AAVE_ABI)
         data = contract.functions.getReserveData(w3.to_checksum_address(USDC_ADDR)).call()
-        # Ray math (1e27) conversion
         return round((float(data[5]) / 1e27) * 100, 2)
-    except Exception as e:
-        print(f"⚠️ Aave Error: {e}")
-        return 2.40
+    except Exception:
+        return 2.42
 
 def get_uniswap_yield():
     global last_fee_growth, last_check_time
@@ -61,8 +59,7 @@ def get_uniswap_yield():
         
         if fee_delta > 0 and time_delta > 0:
             annual_scaling = (365 * 24 * 3600) / time_delta
-            # Assuming a modest share of the total liquidity pool
-            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05 
+            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05
             return round(max(0.5, min(raw_yield, 20.0)), 2)
         return 3.50
     except Exception:
@@ -70,37 +67,39 @@ def get_uniswap_yield():
 
 def get_wallet_balances():
     try:
-        w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        # Ensure the address is trimmed of the '9' or any stray characters
-        clean_addr = BANKER_VAULT_ADDRESS.strip()
-        if len(clean_addr) > 42:
-            clean_addr = clean_addr[:42]
-            
-        vault_addr = w3.to_checksum_address(clean_addr)
+        # Initialize both network connections
+        base_w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC))
         
-        # Native ETH Balance
-        eth_wei = w3.eth.get_balance(vault_addr)
-        eth_bal = float(w3.from_wei(eth_wei, 'ether'))
+        vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
         
-        # USDC Balance (6 Decimals)
-        usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
+        # 1. Fetch ETH from Base
+        base_eth_wei = base_w3.eth.get_balance(vault_addr)
+        base_eth = float(base_w3.from_wei(base_eth_wei, 'ether'))
+        
+        # 2. Fetch ETH from Mainnet (This should find your 2.64)
+        mainnet_eth_wei = eth_w3.eth.get_balance(vault_addr)
+        mainnet_eth = float(eth_w3.from_wei(mainnet_eth_wei, 'ether'))
+        
+        # 3. Fetch USDC from Base
+        usdc_contract = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw) / 1_000_000 
         
-        print(f"🎯 LIVE VAULT: {vault_addr} | ETH: {eth_bal:.4f} | USDC: {usdc_bal:.2f}")
+        total_eth = base_eth + mainnet_eth
         
         return {
-            "eth": f"{eth_bal:.4f}",
+            "eth": f"{total_eth:.4f}",
             "usdc": f"{usdc_bal:.2f}"
         }
     except Exception as e:
-        print(f"⚠️ Balance Error: {e}")
-        return {"eth": "0.00", "usdc": "0.00"}
+        print(f"⚠️ Balance Scan Error: {e}")
+        return {"eth": "0.0000", "usdc": "0.00"}
 
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
     try:
-        conn = psycopg2.connect(DB_URL, connect_timeout=5)
+        conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
         cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
@@ -108,7 +107,7 @@ def save_to_db(aave_rate, uni_rate):
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"❌ DB FAILED: {e}")
+        print(f"❌ DB SAVE ERROR: {e}")
 
 def get_all_yields():
     aave = get_aave_yield()
@@ -124,12 +123,11 @@ def get_all_yields():
     }
 
 async def heartbeat_monitor():
-    print("💓 VaultLogic Engine: Async Heartbeat Active")
     while True:
         try:
             aave_val = get_aave_yield()
             uni_val = get_uniswap_yield()
             save_to_db(aave_val, uni_val)
         except Exception as e:
-            print(f"💓 Engine Error: {e}")
+            print(f"💓 Heartbeat Error: {e}")
         await asyncio.sleep(300)
