@@ -40,6 +40,7 @@ async def get_vault(request: Request):
                 body {{ background: #111; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .container {{ display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; }}
                 .wallet-box {{ margin-top: 50px; background: #1a1a1a; padding: 25px; border-radius: 15px; display: inline-block; border: 1px solid #333; }}
+                .footnote {{ color: #444; font-size: 10px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }}
             </style>
         </head>
         <body>
@@ -49,13 +50,15 @@ async def get_vault(request: Request):
             <div class="container">{yield_cards}</div>
             
             <div class="wallet-box">
-                <h2 style="margin-top: 0; font-size: 18px; color: #aaa;">VAULT BALANCE (BASE)</h2>
+                <h2 style="margin-top: 0; font-size: 16px; color: #ffcc00; text-transform: uppercase;">Test Vault (Internal Monitoring)</h2>
                 <p style="font-size: 22px; margin: 10px 0;">
                     <span style="color: #00ffcc;">{data['wallet']['eth']}</span> ETH &nbsp;|&nbsp; 
                     <span style="color: #00ffcc;">${data['wallet']['usdc']}</span> USDC
                 </p>
-                <p style="color: #555; font-size: 12px; margin-bottom: 0;">Last Scouted: {data['last_updated']}</p>
+                <p style="color: #555; font-size: 11px; margin-bottom: 0;">Agent Heartbeat: {data['last_updated']}</p>
             </div>
+            
+            <p class="footnote">Real-time performance monitoring via canary wallet</p>
         </body>
     </html>
     """
@@ -68,4 +71,4 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
-#Version 1
+#Version 2 - Verified Launch Build
