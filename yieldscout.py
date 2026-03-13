@@ -34,35 +34,40 @@ last_fee_growth = None
 last_check_time = None
 
 def get_external_opportunities():
-    """Scouts the wider market and applies Vaultlogic Safety Rules"""
+    """Scouts market and applies Safety Rules with De-duplication"""
     try:
         url = "https://yields.llama.fi/pools"
         response = requests.get(url, timeout=10)
         all_pools = response.json().get('data', [])
         
         safe_pools = []
+        seen_assets = set() # Track unique assets
+        
         for pool in all_pools:
-            # Map API fields
+            symbol = pool.get('symbol', 'Unknown')
             total_apy = pool.get('apy', 0)
-            base_apy = pool.get('apyBase') or 0 # Fees
             
+            # Skip if we already added this asset
+            if symbol in seen_assets:
+                continue
+                
             pool_meta = {
-                "pool_name": pool.get('symbol'),
+                "pool_name": symbol,
                 "tvl": pool.get('tvlUsd', 0),
                 "apy": total_apy,
-                "fee_apy": base_apy 
+                "fee_apy": pool.get('apyBase') or 0 
             }
             
             is_safe, _ = guard.is_pool_whale_proof(pool_meta)
             
-            # Filter for Base chain and exclude pools that are clearly broken (0% APY)
             if is_safe and pool.get('chain') == 'Base' and total_apy > 0:
                 safe_pools.append({
                     "protocol": pool.get('project').capitalize(),
                     "yield": f"{total_apy:.2f}%",
-                    "asset": pool.get('symbol'),
+                    "asset": symbol,
                     "label": "Approved"
                 })
+                seen_assets.add(symbol) # Mark as seen
             
             if len(safe_pools) >= 3: break 
         return safe_pools
