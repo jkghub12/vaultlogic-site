@@ -2,10 +2,12 @@ import os
 import time
 import asyncio
 import psycopg2
+import requests  
 from web3 import Web3
 from web3.middleware import ExtraDataToPOAMiddleware
 from datetime import datetime
 from dotenv import load_dotenv
+from safety import VaultlogicSafety  
 
 load_dotenv()
 
@@ -24,9 +26,49 @@ AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserv
 UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 ERC20_ABI = [{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
 
+# Initialize Safety Guard
+guard = VaultlogicSafety()
+
 # Global State for Fee Calculation
 last_fee_growth = None
 last_check_time = None
+
+def get_external_opportunities():
+    """Scouts the wider market and applies Vaultlogic Safety Rules"""
+    try:
+        url = "https://yields.llama.fi/pools"
+        response = requests.get(url, timeout=10)
+        all_pools = response.json().get('data', [])
+        
+        safe_pools = []
+        for pool in all_pools:
+            # Map API fields
+            total_apy = pool.get('apy', 0)
+            base_apy = pool.get('apyBase') or 0 # Fees
+            
+            pool_meta = {
+                "pool_name": pool.get('symbol'),
+                "tvl": pool.get('tvlUsd', 0),
+                "apy": total_apy,
+                "fee_apy": base_apy 
+            }
+            
+            is_safe, _ = guard.is_pool_whale_proof(pool_meta)
+            
+            # Filter for Base chain and exclude pools that are clearly broken (0% APY)
+            if is_safe and pool.get('chain') == 'Base' and total_apy > 0:
+                safe_pools.append({
+                    "protocol": pool.get('project').capitalize(),
+                    "yield": f"{total_apy:.2f}%",
+                    "asset": pool.get('symbol'),
+                    "label": "Approved"
+                })
+            
+            if len(safe_pools) >= 3: break 
+        return safe_pools
+    except Exception as e:
+        print(f"Scouting error: {e}")
+        return []
 
 def get_aave_yield():
     try:
@@ -66,42 +108,39 @@ def get_wallet_balances():
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
         vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
-        
-        # Native ETH (Base)
         eth_wei = w3.eth.get_balance(vault_addr)
         eth_bal = float(w3.from_wei(eth_wei, 'ether'))
-        
-        # USDC (Base)
         usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
         usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
         usdc_bal = float(usdc_raw) / 1_000_000 
-        
         return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
     except Exception:
         return {"eth": "0.0000", "usdc": "0.00"}
+
+def get_all_yields():
+    core_yields = [
+        {"protocol": "Aave V3", "yield": f"{get_aave_yield()}%", "asset": "USDC", "label": "Core"},
+        {"protocol": "Uniswap V3", "yield": f"{get_uniswap_yield()}%", "asset": "USDC/ETH", "label": "Core"}
+    ]
+    
+    external_yields = get_external_opportunities()
+    
+    return {
+        "yields": core_yields + external_yields,
+        "wallet": get_wallet_balances(),
+        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 def save_to_db(aave_rate, uni_rate):
     if not DB_URL: return
     try:
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS yields (id SERIAL PRIMARY KEY, aave_rate REAL, uniswap_rate REAL, timestamp TIMESTAMP);")
         cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
         conn.commit()
         cur.close()
         conn.close()
-    except Exception:
-        pass
-
-def get_all_yields():
-    return {
-        "yields": [
-            {"protocol": "Aave V3", "yield": f"{get_aave_yield()}%", "asset": "USDC"},
-            {"protocol": "Uniswap V3", "yield": f"{get_uniswap_yield()}%", "asset": "USDC/ETH"}
-        ],
-        "wallet": get_wallet_balances(),
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+    except Exception: pass
 
 async def heartbeat_monitor():
     while True:
