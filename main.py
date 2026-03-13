@@ -10,7 +10,7 @@ async def startup_event():
     print("🚀 Vaultlogic Background Sync Task Initialized.")
     asyncio.create_task(heartbeat_monitor())
 
-# Mapping for the "Verify" feature
+# Updated Mapping for forced Base Market loading
 CHART_LINKS = {
     "Aave V3": "https://app.aave.com/reserve-overview/?underlyingAsset=0x833589fcd6edbe08f4c7c32d4f71b54bda02913&marketName=proto_base_v3",
     "Aave-v3": "https://app.aave.com/reserve-overview/?underlyingAsset=0x833589fcd6edbe08f4c7c32d4f71b54bda02913&marketName=proto_base_v3",
