@@ -10,15 +10,12 @@ async def startup_event():
     print("🚀 Background Sync Task Initialized.")
     asyncio.create_task(heartbeat_monitor())
 
-@app.get("/")
-async def root():
-    return {"message": "VaultLogic API is online. Visit /vault for dashboard."}
-
+# --- THIS MAKES THE DASHBOARD THE MAIN PAGE ---
+@app.get("/", response_class=HTMLResponse)
 @app.get("/vault", response_class=HTMLResponse)
 async def get_vault(request: Request):
     data = get_all_yields()
     
-    # Generate cards for BOTH Aave and Uniswap
     yield_cards = ""
     for item in data["yields"]:
         yield_cards += f"""
@@ -35,13 +32,9 @@ async def get_vault(request: Request):
             <title>VaultLogic Command Center</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
         </head>
-        <body style="background: #111; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 40px 20px;">
+        <body style="background: #111; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px;">
             <h1 style="color: #ffffff; letter-spacing: 2px; margin-bottom: 40px;">VAULTLOGIC COMMAND CENTER</h1>
-            
-            <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 20px;">
-                {yield_cards}
-            </div>
-
+            <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 20px;">{yield_cards}</div>
             <div style="margin-top: 50px; background: #1a1a1a; padding: 25px; border-radius: 15px; display: inline-block; border: 1px solid #333;">
                 <h2 style="margin-top: 0; font-size: 18px; color: #aaa;">WALLET BALANCES (BASE)</h2>
                 <p style="font-size: 22px; margin: 10px 0;">
@@ -53,3 +46,8 @@ async def get_vault(request: Request):
         </body>
     </html>
     """
+
+# --- THIS FIXES THE API PATH ---
+@app.get("/api/yield")
+async def yield_api():
+    return get_all_yields()
