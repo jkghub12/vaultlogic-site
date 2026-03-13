@@ -60,7 +60,7 @@ def get_external_opportunities():
             
             is_safe, _ = guard.is_pool_whale_proof(pool_meta)
             
-            if is_safe and pool.get('chain') == 'Base' and total_apy > 0:
+            if is_safe and pool.get('chain') == 'Base' and total_apy > 0.1:
                 safe_pools.append({
                     "protocol": pool.get('project').capitalize(),
                     "yield": f"{total_apy:.2f}%",
