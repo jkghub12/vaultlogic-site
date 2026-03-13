@@ -11,7 +11,6 @@ load_dotenv()
 
 # --- CONFIG ---
 RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
-ETH_MAINNET_RPC = "https://cloudflare-eth.com"
 DB_URL = os.getenv("DATABASE_URL")
 BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
 
@@ -43,61 +42,42 @@ def get_uniswap_yield():
     global last_fee_growth, last_check_time
     try:
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
         current_fees = pool.functions.feeGrowthGlobal0X128().call()
         current_time = time.time()
         
-        if last_fee_growth is None or current_fees < last_fee_growth:
+        if last_fee_growth is None or (current_time - (last_check_time or 0)) < 60:
             last_fee_growth, last_check_time = current_fees, current_time
             return 3.50
         
         fee_delta = current_fees - last_fee_growth
         time_delta = current_time - last_check_time
         
-        if fee_delta > 0 and time_delta > 0:
+        if fee_delta > 0 and time_delta > 60:
             annual_scaling = (365 * 24 * 3600) / time_delta
             raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05
-            return round(max(0.5, min(raw_yield, 20.0)), 2)
+            last_fee_growth, last_check_time = current_fees, current_time
+            return round(max(0.5, min(raw_yield, 15.0)), 2)
         return 3.50
     except Exception:
         return 3.50
 
 def get_wallet_balances():
     try:
-        # Connect to both networks with timeouts to prevent hanging
-        base_w3 = Web3(Web3.HTTPProvider(RPC_URL, request_kwargs={'timeout': 10}))
-        eth_w3 = Web3(Web3.HTTPProvider(ETH_MAINNET_RPC, request_kwargs={'timeout': 10}))
+        w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
         
-        vault_addr = base_w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
+        # Native ETH (Base)
+        eth_wei = w3.eth.get_balance(vault_addr)
+        eth_bal = float(w3.from_wei(eth_wei, 'ether'))
         
-        # Check Base Network
-        try:
-            base_eth = float(base_w3.from_wei(base_w3.eth.get_balance(vault_addr), 'ether'))
-        except:
-            base_eth = 0.0
-
-        # Check Ethereum Mainnet (where the 2.64 ETH lives)
-        try:
-            mainnet_eth = float(eth_w3.from_wei(eth_w3.eth.get_balance(vault_addr), 'ether'))
-        except Exception as e:
-            print(f"⚠️ Mainnet Check Failed: {e}")
-            mainnet_eth = 0.0
-            
         # USDC (Base)
-        try:
-            usdc_contract = base_w3.eth.contract(address=base_w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
-            usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
-            usdc_bal = float(usdc_raw) / 1_000_000
-        except:
-            usdc_bal = 0.0
+        usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
+        usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
+        usdc_bal = float(usdc_raw) / 1_000_000 
         
-        total_eth = base_eth + mainnet_eth
-        print(f"💰 BALANCE SYNC -> Base: {base_eth} | Mainnet: {mainnet_eth} | Total: {total_eth}")
-        
-        return {"eth": f"{total_eth:.4f}", "usdc": f"{usdc_bal:.2f}"}
-    except Exception as e:
-        print(f"❌ Global Balance Error: {e}")
+        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
+    except Exception:
         return {"eth": "0.0000", "usdc": "0.00"}
 
 def save_to_db(aave_rate, uni_rate):
@@ -114,15 +94,12 @@ def save_to_db(aave_rate, uni_rate):
         pass
 
 def get_all_yields():
-    aave = get_aave_yield()
-    uni = get_uniswap_yield()
-    balances = get_wallet_balances()
     return {
         "yields": [
-            {"protocol": "Aave V3", "yield": f"{aave}%", "asset": "USDC"},
-            {"protocol": "Uniswap V3", "yield": f"{uni}%", "asset": "USDC/ETH"}
+            {"protocol": "Aave V3", "yield": f"{get_aave_yield()}%", "asset": "USDC"},
+            {"protocol": "Uniswap V3", "yield": f"{get_uniswap_yield()}%", "asset": "USDC/ETH"}
         ],
-        "wallet": balances,
+        "wallet": get_wallet_balances(),
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
@@ -132,6 +109,5 @@ async def heartbeat_monitor():
             aave_val = get_aave_yield()
             uni_val = get_uniswap_yield()
             save_to_db(aave_val, uni_val)
-        except Exception:
-            pass
+        except Exception: pass
         await asyncio.sleep(300)
