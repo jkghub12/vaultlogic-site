@@ -5,12 +5,38 @@ from yieldscout import get_all_yields, heartbeat_monitor
 
 app = FastAPI()
 
+# 🛡️ GLOBAL CACHE: This stores the data in memory so users don't have to wait.
+# Initializing with placeholder data to avoid errors on first boot.
+vault_cache = {
+    "yields": [],
+    "wallet": {"eth": "0.00", "usdc": "0.00"},
+    "last_updated": "Initializing System..."
+}
+
+# 🚀 BACKGROUND TASK: This runs once and keeps looping forever.
+async def background_sync():
+    global vault_cache
+    while True:
+        try:
+            print("🔍 Vaultlogic Scout: Syncing with Base Network...")
+            # Run the heavy scraping in the background
+            new_data = get_all_yields()
+            if new_data:
+                vault_cache = new_data
+                print(f"✅ Sync Complete: {new_data['last_updated']}")
+        except Exception as e:
+            print(f"❌ Scout Error: {e}")
+        
+        # Wait 60 seconds before scouting again
+        await asyncio.sleep(60)
+
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Vaultlogic Background Sync Task Initialized.")
+    print("🚀 Vaultlogic Command Center Initialized.")
+    # Run the Heartbeat monitor AND the Background Sync
     asyncio.create_task(heartbeat_monitor())
+    asyncio.create_task(background_sync())
 
-# Updated Mapping for forced Base Market loading
 CHART_LINKS = {
     "Aave V3": "https://app.aave.com/reserve-overview/?underlyingAsset=0x833589fcd6edbe08f4c7c32d4f71b54bda02913&marketName=proto_base_v3",
     "Aave-v3": "https://app.aave.com/reserve-overview/?underlyingAsset=0x833589fcd6edbe08f4c7c32d4f71b54bda02913&marketName=proto_base_v3",
@@ -21,14 +47,13 @@ CHART_LINKS = {
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    data = get_all_yields()
+    # ⚡ INSTANT RETURN: No more waiting for 'get_all_yields()'
+    data = vault_cache
     
     yield_cards = ""
-    for item in data["yields"]:
+    for item in data.get("yields", []):
         label = item.get('label', 'New')
         badge_color = "#00ffcc" if label == "Core" else "#ffcc00"
-        
-        # Determine the link based on Asset name first, then Protocol name
         target_link = CHART_LINKS.get(item['asset'], CHART_LINKS.get(item['protocol'], "https://basescan.org"))
         
         yield_cards += f"""
