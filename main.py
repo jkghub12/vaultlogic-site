@@ -5,21 +5,19 @@ from yieldscout import get_all_yields, heartbeat_monitor
 
 app = FastAPI()
 
-# 🛡️ GLOBAL CACHE: This stores the data in memory so users don't have to wait.
-# Initializing with placeholder data to avoid errors on first boot.
+# 🛡️ GLOBAL CACHE: Updated with a more professional initialization message.
 vault_cache = {
     "yields": [],
     "wallet": {"eth": "0.00", "usdc": "0.00"},
-    "last_updated": "Initializing System..."
+    "last_updated": "SYNCING WITH BASE MAINNET..."
 }
 
-# 🚀 BACKGROUND TASK: This runs once and keeps looping forever.
+# 🚀 BACKGROUND TASK: Keeps the cache fresh without slowing down the site.
 async def background_sync():
     global vault_cache
     while True:
         try:
             print("🔍 Vaultlogic Scout: Syncing with Base Network...")
-            # Run the heavy scraping in the background
             new_data = get_all_yields()
             if new_data:
                 vault_cache = new_data
@@ -33,7 +31,6 @@ async def background_sync():
 @app.on_event("startup")
 async def startup_event():
     print("🚀 Vaultlogic Command Center Initialized.")
-    # Run the Heartbeat monitor AND the Background Sync
     asyncio.create_task(heartbeat_monitor())
     asyncio.create_task(background_sync())
 
@@ -47,7 +44,6 @@ CHART_LINKS = {
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    # ⚡ INSTANT RETURN: No more waiting for 'get_all_yields()'
     data = vault_cache
     
     yield_cards = ""
@@ -79,31 +75,51 @@ async def get_vault(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 40px 20px; }}
-                .container {{ display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; }}
+                .container {{ display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; max-width: 1200px; margin: 0 auto; }}
+                
+                /* Mission Section */
+                .mission-brief {{ max-width: 700px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 30px; }}
+                .mission-brief h1 {{ color: #ffffff; letter-spacing: 5px; margin-bottom: 10px; text-transform: uppercase; }}
+                .mission-brief h2 {{ font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 20px; }}
+                .mission-brief p {{ font-size: 18px; line-height: 1.6; color: #ccc; font-style: italic; }}
+                
                 .wallet-box {{ margin-top: 50px; background: #151515; padding: 25px; border-radius: 15px; display: inline-block; border: 1px solid #333; box-shadow: 0 0 20px rgba(0,255,204,0.05); }}
                 .footnote {{ color: #444; font-size: 10px; margin-top: 30px; text-transform: uppercase; letter-spacing: 2px; }}
+                
+                /* Pulse Animation for the Agent */
+                .agent-pulse {{ display: inline-block; width: 8px; height: 8px; background: #00ffcc; border-radius: 50%; margin-right: 10px; box-shadow: 0 0 10px #00ffcc; animation: pulse 2s infinite; }}
+                @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.3; }} 100% {{ opacity: 1; }} }}
             </style>
         </head>
         <body>
-            <h1 style="color: #ffffff; letter-spacing: 3px; margin-bottom: 5px;">VAULTLOGIC COMMAND CENTER</h1>
-            <p style="color: #00ffcc; font-size: 12px; margin-bottom: 40px; font-weight: bold; text-transform: uppercase;">Verified AI-Agentic Yield Intelligence</p>
-            
+            <div class="mission-brief">
+                <h1>VAULTLOGIC</h1>
+                <h2>Deterministic DeFi Intelligence</h2>
+                <p>"The 'Legacy Tax' is the cost of manual error. We build autonomous guardrails to eliminate it."</p>
+                <div style="margin-top: 20px; font-size: 12px; color: #00ffcc; font-weight: bold; text-transform: uppercase;">
+                    <span class="agent-pulse"></span> SYSTEM PULSE: ACTIVE ON BASE MAINNET
+                </div>
+            </div>
+
             <div class="container">{yield_cards}</div>
             
             <div class="wallet-box">
-                <h2 style="margin-top: 0; font-size: 14px; color: #ffcc00; text-transform: uppercase; letter-spacing: 1px;">Test Vault (Internal Monitoring)</h2>
+                <h2 style="margin-top: 0; font-size: 14px; color: #ffcc00; text-transform: uppercase; letter-spacing: 1px;">Strategic Canary Vault</h2>
                 <p style="font-size: 24px; margin: 12px 0; font-weight: bold;">
                     <span style="color: #ffffff;">{data['wallet']['eth']}</span> <span style="font-size: 14px; color: #666;">ETH</span> &nbsp;|&nbsp; 
                     <span style="color: #ffffff;">${data['wallet']['usdc']}</span> <span style="font-size: 14px; color: #666;">USDC</span>
                 </p>
-                <p style="color: #444; font-size: 11px; margin-bottom: 0;">System Pulse: {data['last_updated']}</p>
+                <p style="color: #444; font-size: 11px; margin-bottom: 0;">Last On-Chain Sync: {data['last_updated']}</p>
             </div>
             
-            <p class="footnote">Real-time performance monitoring via canary wallet address</p>
+            <p class="footnote">VaultLogic.dev — Built for the $BNKR Ecosystem</p>
         </body>
     </html>
     """
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Railway typically injects a PORT environment variable
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

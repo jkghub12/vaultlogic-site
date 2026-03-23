@@ -6,4 +6,4 @@ coinbase-agentkit-langchain
 eth-account
 requests
 psycopg2-binary
-#
+web3
