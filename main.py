@@ -31,7 +31,7 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- UPDATED STRATEGY BRIEF ---
+# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -53,10 +53,8 @@ async def get_strategy():
                 <a href="/" class="back">← Return to Command Center</a>
                 <h1>The Deterministic Vision</h1>
                 <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
-                
                 <h2>I. Beyond Speculation</h2>
                 <p>While Phase Alpha focuses on <strong>Active Liquidity Management</strong>, our architecture is built for multi-domain execution. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
-                
                 <h2>II. The Regulatory Shield</h2>
                 <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation. We don't just find yield; we verify its compliance status in real-time.</p>
             </div>
@@ -72,8 +70,8 @@ async def get_audit():
         <head><style>body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px;text-align:center;}h1{color:#00ffcc;}</style></head>
         <body>
             <h1>2026 CLARITY ACT AUDIT</h1>
-            <p>Yield Classification: ✅ VERIFIED</p>
-            <p>Passive Interest Risk: 🚨 HIGH</p>
+            <p>Yield Classification: ✅ VERIFIED (Liquidity Provision)</p>
+            <p>Passive Interest Risk: 🚨 HIGH (Direct Interest Found)</p>
             <a href="/" style="color:#666;text-decoration:none;">← RETURN</a>
         </body>
     </html>
@@ -108,7 +106,7 @@ async def get_vault(request: Request):
         <head>
             <title>VaultLogic Command Center</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://unpkg.com/@coinbase/wallet-sdk@3.7.1/dist/index.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
@@ -121,7 +119,7 @@ async def get_vault(request: Request):
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Your Wallet</button>
+                <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Multi-Wallet (UHNW)</button>
                 <div class="nav-links">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
@@ -129,19 +127,30 @@ async def get_vault(request: Request):
             </div>
             <div class="container">{yield_cards}</div>
             <script>
-                const coinbaseWallet = new CoinbaseWalletSDK({{ appName: "VaultLogic", darkMode: true }});
-                const ethereum = coinbaseWallet.makeWeb3Provider("https://mainnet.base.org", 8453);
                 async function syncWallet() {{
-                    try {{
-                        const accounts = await ethereum.request({{ method: 'eth_requestAccounts' }});
-                        const walletAddress = accounts[0];
-                        document.getElementById('sync-button').innerText = "SYNCED: " + walletAddress.substring(0,6) + "...";
-                        await fetch("/connect-wallet", {{ 
-                            method: "POST", 
-                            headers: {{ "Content-Type": "application/json" }}, 
-                            body: JSON.stringify({{ address: walletAddress }}) 
-                        }});
-                    }} catch (err) {{ console.error(err); }}
+                    const btn = document.getElementById('sync-button');
+                    // Check if ANY wallet extension is installed
+                    if (typeof window.ethereum !== 'undefined') {{
+                        try {{
+                            const provider = new ethers.providers.Web3Provider(window.ethereum);
+                            await provider.send("eth_requestAccounts", []);
+                            const signer = provider.getSigner();
+                            const address = await signer.getAddress();
+                            
+                            btn.innerText = "SYNCED: " + address.substring(0,6) + "...";
+                            btn.style.background = "#fff";
+
+                            await fetch("/connect-wallet", {{ 
+                                method: "POST", 
+                                headers: {{ "Content-Type": "application/json" }}, 
+                                body: JSON.stringify({{ address: address }}) 
+                            }});
+                        }} catch (err) {{
+                            console.error("User rejected the connection.");
+                        }}
+                    }} else {{
+                        alert("Please install a Web3 wallet (MetaMask, Coinbase, etc.) to sync.");
+                    }}
                 }}
             </script>
         </body>
