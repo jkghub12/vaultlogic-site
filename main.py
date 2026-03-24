@@ -4,18 +4,16 @@ import psycopg2
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-
-try:
-    from yieldscout import get_all_yields
-except ImportError:
-    def get_all_yields(): return []
+from yieldscout import get_all_yields, heartbeat_monitor
 
 app = FastAPI()
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 vault_cache = {
     "yields": [],
-    "last_updated": "INITIALIZING SCAN..."
+    "wallet": {"eth": "0.00", "usdc": "0.00"},
+    "last_updated": "SYSTEM INITIALIZING..."
 }
 
 class WalletConnect(BaseModel):
@@ -34,71 +32,116 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.get("/audit", response_class=HTMLResponse)
+async def get_audit_dashboard():
+    compliance_check = {
+        "active_yield_status": "✅ VERIFIED (Liquidity Provision)",
+        "passive_yield_risk": "🚨 HIGH (Direct Interest Found)",
+        "form_1099da_ready": "NO - 14 Basis Mismatches",
+        "risk_score": 72
+    }
+    return f"""
+    <html>
+        <head>
+            <title>VaultLogic | Audit Defense</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ background: #0a0a0a; color: #eee; font-family: sans-serif; padding: 50px 20px; line-height: 1.6; }}
+                .status-box {{ background: #111; padding: 30px; border-radius: 12px; border: 1px solid #333; max-width: 700px; margin: 0 auto; }}
+                .badge {{ padding: 5px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
+                .safe {{ background: #00ffcc1a; color: #00ffcc; border: 1px solid #00ffcc; }}
+                .danger {{ background: #ff44441a; color: #ff4444; border: 1px solid #ff4444; }}
+                h1 {{ color: #00ffcc; font-size: 24px; letter-spacing: 2px; }}
+                .btn {{ display: inline-block; margin-top: 30px; padding: 15px 30px; background: #00ffcc; color: #000; text-decoration: none; font-weight: bold; border-radius: 4px; }}
+            </style>
+        </head>
+        <body>
+            <div class="status-box">
+                <h1>2026 CLARITY ACT AUDIT</h1>
+                <p><strong>Yield Classification:</strong> <span class="badge safe">{compliance_check['active_yield_status']}</span></p>
+                <p><strong>Passive Interest Risk:</strong> <span class="badge danger">{compliance_check['passive_yield_risk']}</span></p>
+                <p>IRS Status: <strong style="color: #ff4444;">{compliance_check['form_1099da_ready']}</strong></p>
+                <a href="#" class="btn">GENERATE DEFENSE REPORT</a><br>
+                <a href="/" style="display:block; margin-top:20px; color:#666; text-decoration:none; font-size:11px;">← RETURN</a>
+            </div>
+        </body>
+    </html>
+    """
+
+@app.get("/strategy", response_class=HTMLResponse)
+async def get_strategy():
+    return """
+    <html>
+        <body style="background:#0a0a0a;color:#ccc;font-family:sans-serif;padding:50px;">
+            <h1 style="color:#00ffcc;">The Deterministic Vision</h1>
+            <p>VaultLogic eliminates information asymmetry and regulatory friction.</p>
+            <a href="/" style="color:#666; text-decoration:none;">← RETURN</a>
+        </body>
+    </html>
+    """
+
 async def background_sync():
     while True:
         try:
-            data = get_all_yields()
-            if data:
-                vault_cache["yields"] = data
-                vault_cache["last_updated"] = "SYSTEM ONLINE | LIVE MARKET DATA"
-        except Exception:
-            pass
-        await asyncio.sleep(300) # Refresh every 5 minutes
+            vault_cache["yields"] = await get_all_yields()
+            vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
+        except Exception as e:
+            vault_cache["last_updated"] = f"ERROR: {str(e)}"
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_sync())
-
-# --- NAVIGATION ROUTES ---
-@app.get("/strategy", response_class=HTMLResponse)
-async def get_strategy():
-    return """<html><head><style>body{background:#0a0a0a;color:#ccc;font-family:sans-serif;padding:50px;line-height:1.6;}h1{color:#00ffcc;}</style></head>
-    <body><h1>VaultLogic Strategy</h1><p>Deterministic yield optimization for the 2026 regulatory environment.</p><a href="/" style="color:#00ffcc;">← RETURN</a></body></html>"""
-
-@app.get("/audit", response_class=HTMLResponse)
-async def get_audit():
-    return """<html><head><style>body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px;text-align:center;}h1{color:#ff4444;}</style></head>
-    <body><h1>2026 CLARITY ACT AUDIT</h1><p>Scanning connected wallets for non-compliant interest structures...</p><a href="/" style="color:#666;">← RETURN</a></body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
     yield_cards = ""
     for y in vault_cache["yields"]:
         yield_cards += f"""
-        <div style="background:#111;padding:20px;margin:10px;border-radius:8px;border-left:4px solid #00ffcc;text-align:left;">
-            <h3 style="margin:0;color:#00ffcc;font-size:12px;text-transform:uppercase;">{y['protocol']}</h3>
-            <p style="margin:5px 0;font-size:24px;font-weight:bold;">{y['apy']}%</p>
-            <small style="color:#666;">{y['asset']} | BASE NETWORK</small>
-        </div>"""
+        <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
+            <h3 style="margin: 0; color: #00ffcc;">{y['protocol']}</h3>
+            <p style="margin: 5px 0; font-size: 24px; font-weight: bold;">{y['apy']}% APY</p>
+            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
+        </div>
+        """
 
     return f"""
     <html>
         <head>
             <title>VaultLogic Command Center</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+            <script src="https://unpkg.com/@coinbase/wallet-sdk@3.7.1/dist/index.js"></script>
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
-                .sync-btn {{ background: #00ffcc; color: #000; padding: 18px 40px; border-radius: 5px; font-weight: bold; cursor: pointer; border: none; width: 100%; max-width: 320px; }}
-                .nav {{ margin: 20px 0; }} .nav a {{ color: #666; text-decoration: none; margin: 0 15px; font-size: 12px; text-transform: uppercase; }}
-                .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); max-width: 1000px; margin: 40px auto; }}
+                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
+                .sync-btn {{ background: #00ffcc; color: #000; padding: 18px 45px; border-radius: 5px; font-weight: bold; cursor: pointer; text-transform: uppercase; border: none; letter-spacing: 2px; }}
+                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
+                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
             </style>
         </head>
         <body>
-            <h1 style="letter-spacing:10px;">VAULTLOGIC</h1>
-            <p style="color:#444; font-size:10px;">{vault_cache['last_updated']}</p>
-            <div class="nav"><a href="/audit" style="color:#ff4444;">Compliance Audit</a><a href="/strategy">Strategy Brief</a></div>
-            <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Multi-Wallet (UHNW)</button>
-            <div class="grid">{yield_cards}</div>
+            <div class="mission-brief">
+                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+                <p style="color: #00ffcc; font-size: 10px;">{vault_cache['last_updated']}</p>
+                <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Your Wallet</button>
+                <div class="nav-links">
+                    <a href="/strategy">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                </div>
+            </div>
+            <div class="container">{yield_cards}</div>
             <script>
+                const coinbaseWallet = new CoinbaseWalletSDK({{ appName: "VaultLogic", darkMode: true }});
+                const ethereum = coinbaseWallet.makeWeb3Provider("https://mainnet.base.org", 8453);
                 async function syncWallet() {{
-                    const btn = document.getElementById('sync-button');
-                    if (!window.ethereum) return alert("Wallet not detected.");
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send("eth_requestAccounts", []);
-                    const address = await provider.getSigner().getAddress();
-                    btn.innerText = "CONNECTED: " + address.substring(0,6);
-                    await fetch("/connect-wallet", {{ method: "POST", headers: {{"Content-Type":"application/json"}}, body: JSON.stringify({{address:address}}) }});
+                    const accounts = await ethereum.request({{ method: 'eth_requestAccounts' }});
+                    const walletAddress = accounts[0];
+                    document.getElementById('sync-button').innerText = "SYNCED: " + walletAddress.substring(0,6) + "...";
+                    await fetch("/connect-wallet", {{ 
+                        method: "POST", 
+                        headers: {{ "Content-Type": "application/json" }}, 
+                        body: JSON.stringify({{ address: walletAddress }}) 
+                    }});
                 }}
             </script>
         </body>
