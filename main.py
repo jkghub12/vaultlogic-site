@@ -31,7 +31,7 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF (POLISHED) ---
+# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -53,16 +53,21 @@ async def get_strategy():
                 <a href="/" class="back">← Return to Command Center</a>
                 <h1>The Deterministic Vision</h1>
                 <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
+                
                 <h2>I. Beyond Speculation</h2>
-                <p>While Phase Alpha focuses on <strong>Active Liquidity Management</strong>, our architecture is built for multi-domain execution. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
-                <h2>II. The Regulatory Shield</h2>
-                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation. We don't just find yield; we verify its compliance status in real-time.</p>
+                <p>While Phase Alpha focuses on Active Liquidity Management, our architecture is built for multi-domain execution. We prioritize safety and <span class="highlight">deterministic outcomes</span>.</p>
+                
+                <h2>II. Validation Tier</h2>
+                <p>Current system stress-testing is performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
+
+                <h2>III. The Regulatory Shield</h2>
+                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
             </div>
         </body>
     </html>
     """
 
-# --- COMPLIANCE AUDIT (RESTORED BUTTON) ---
+# --- COMPLIANCE AUDIT ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -74,17 +79,14 @@ async def get_audit():
                 h1{color:#00ffcc;letter-spacing:2px;}
                 .box{max-width:600px; margin:0 auto; padding:30px; border:1px solid #222; border-radius:12px; background:#111;}
                 .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase;}
-                .status{margin:20px 0; font-size:14px;}
             </style>
         </head>
         <body>
             <div class="box">
                 <h1>2026 CLARITY ACT AUDIT</h1>
-                <div class="status">
-                    <p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED (Liquidity Provision)</span></p>
-                    <p>Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH (Direct Interest Found)</span></p>
-                </div>
-                <a href="#" class="btn" onclick="alert('Demo Mode: Report generation will be enabled in Phase 1.7')">GENERATE DEFENSE REPORT</a><br>
+                <p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED (Liquidity Provision)</span></p>
+                <p>Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH (Direct Interest Found)</span></p>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
                 <a href="/" style="display:block; margin-top:30px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase;">← Return to Command Center</a>
             </div>
         </body>
@@ -127,13 +129,14 @@ async def get_vault(request: Request):
                 .sync-btn {{ background: #00ffcc; color: #000; padding: 18px 45px; border-radius: 5px; font-weight: bold; cursor: pointer; text-transform: uppercase; border: none; letter-spacing: 2px; }}
                 .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
+                .phase2-btn {{ background: #ffffff !important; color: #000 !important; margin-top: 10px; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Multi-Wallet (UHNW)</button>
+                <button id="sync-button" class="sync-btn" onclick="syncWallet()">Sync Multi-Wallet</button>
                 <div class="nav-links">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
@@ -149,7 +152,14 @@ async def get_vault(request: Request):
                             await provider.send("eth_requestAccounts", []);
                             const signer = provider.getSigner();
                             const address = await signer.getAddress();
-                            btn.innerText = "SYNCED: " + address.substring(0,6) + "...";
+                            
+                            // UPDATED SYNC LOGIC
+                            btn.innerText = "RESERVE PHASE 2 VAULT";
+                            btn.className = "sync-btn phase2-btn";
+                            btn.onclick = function() {{ 
+                                alert("Application Received. Your address " + address.substring(0,6) + "... has been whitelisted for the $500 Validation Tier."); 
+                            }};
+
                             await fetch("/connect-wallet", {{ 
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
