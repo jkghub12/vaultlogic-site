@@ -1,157 +1,41 @@
 import os
-import time
-import asyncio
 import psycopg2
-import requests  
-from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
-from datetime import datetime
-from dotenv import load_dotenv
-from safety import VaultlogicSafety  
+from psycopg2.extras import RealDictCursor
 
-load_dotenv()
-
-# --- CONFIG ---
-RPC_URL = os.getenv("RPC_URL", "https://mainnet.base.org")
-DB_URL = os.getenv("DATABASE_URL")
-BANKER_VAULT_ADDRESS = os.getenv("BANKER_VAULT_ADDRESS", "0x31d8210350bc719fDfde1149f6aEDF9420E1b889")
-
-# Protocol Addresses (Base)
-DATA_PROVIDER = "0xC4Fcf9893072d61Cc2899C0054877Cb752587981"
-USDC_ADDR = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-UNI_POOL_ADDRESS = "0x4C36388bE6F416A29C8d8Eee81c771cE6bE14B18"
-
-# ABIs
-AAVE_ABI = [{"inputs": [{"name": "asset", "type": "address"}],"name": "getReserveData","outputs": [{"name": "unbacked", "type": "uint256"},{"name": "accruedToTreasuryScaled", "type": "uint256"},{"name": "totalAToken", "type": "uint256"},{"name": "totalStableDebt", "type": "uint256"},{"name": "totalVariableDebt", "type": "uint256"},{"name": "liquidityRate", "type": "uint256"},{"name": "variableBorrowRate", "type": "uint256"},{"name": "stableBorrowRate", "type": "uint256"},{"name": "averageStableBorrowRate", "type": "uint256"},{"name": "liquidityIndex", "type": "uint256"},{"name": "variableBorrowIndex", "type": "uint256"},{"name": "lastUpdateTimestamp", "type": "uint40"}],"stateMutability": "view","type": "function"}]
-UNI_POOL_ABI = [{"inputs":[],"name":"feeGrowthGlobal0X128","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
-ERC20_ABI = [{"constant":True,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
-
-# Initialize Safety Guard
-guard = VaultlogicSafety()
-
-# Global State for Fee Calculation
-last_fee_growth = None
-last_check_time = None
-
-def get_external_opportunities():
-    """Scouts market and applies Safety Rules with De-duplication"""
-    try:
-        url = "https://yields.llama.fi/pools"
-        response = requests.get(url, timeout=10)
-        all_pools = response.json().get('data', [])
-        
-        safe_pools = []
-        seen_assets = set() # Track unique assets
-        
-        for pool in all_pools:
-            symbol = pool.get('symbol', 'Unknown')
-            total_apy = pool.get('apy', 0)
-            
-            # Skip if we already added this asset
-            if symbol in seen_assets:
-                continue
-                
-            pool_meta = {
-                "pool_name": symbol,
-                "tvl": pool.get('tvlUsd', 0),
-                "apy": total_apy,
-                "fee_apy": pool.get('apyBase') or 0 
-            }
-            
-            is_safe, _ = guard.is_pool_whale_proof(pool_meta)
-            
-            if is_safe and pool.get('chain') == 'Base' and total_apy > 0.1:
-                safe_pools.append({
-                    "protocol": pool.get('project').capitalize(),
-                    "yield": f"{total_apy:.2f}%",
-                    "asset": symbol,
-                    "label": "Approved"
-                })
-                seen_assets.add(symbol) # Mark as seen
-            
-            if len(safe_pools) >= 3: break 
-        return safe_pools
-    except Exception as e:
-        print(f"Scouting error: {e}")
-        return []
-
-def get_aave_yield():
-    try:
-        w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-        contract = w3.eth.contract(address=w3.to_checksum_address(DATA_PROVIDER), abi=AAVE_ABI)
-        data = contract.functions.getReserveData(w3.to_checksum_address(USDC_ADDR)).call()
-        return round((float(data[5]) / 1e27) * 100, 2)
-    except Exception:
-        return 2.42
-
-def get_uniswap_yield():
-    global last_fee_growth, last_check_time
-    try:
-        w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        pool = w3.eth.contract(address=w3.to_checksum_address(UNI_POOL_ADDRESS), abi=UNI_POOL_ABI)
-        current_fees = pool.functions.feeGrowthGlobal0X128().call()
-        current_time = time.time()
-        
-        if last_fee_growth is None or (current_time - (last_check_time or 0)) < 60:
-            last_fee_growth, last_check_time = current_fees, current_time
-            return 3.50
-        
-        fee_delta = current_fees - last_fee_growth
-        time_delta = current_time - last_check_time
-        
-        if fee_delta > 0 and time_delta > 60:
-            annual_scaling = (365 * 24 * 3600) / time_delta
-            raw_yield = (fee_delta / (2**128)) * annual_scaling * 0.05
-            last_fee_growth, last_check_time = current_fees, current_time
-            return round(max(0.5, min(raw_yield, 15.0)), 2)
-        return 3.50
-    except Exception:
-        return 3.50
-
-def get_wallet_balances():
-    try:
-        w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        vault_addr = w3.to_checksum_address(BANKER_VAULT_ADDRESS.strip()[:42])
-        eth_wei = w3.eth.get_balance(vault_addr)
-        eth_bal = float(w3.from_wei(eth_wei, 'ether'))
-        usdc_contract = w3.eth.contract(address=w3.to_checksum_address(USDC_ADDR), abi=ERC20_ABI)
-        usdc_raw = usdc_contract.functions.balanceOf(vault_addr).call()
-        usdc_bal = float(usdc_raw) / 1_000_000 
-        return {"eth": f"{eth_bal:.4f}", "usdc": f"{usdc_bal:.2f}"}
-    except Exception:
-        return {"eth": "0.0000", "usdc": "0.00"}
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_all_yields():
-    core_yields = [
-        {"protocol": "Aave V3", "yield": f"{get_aave_yield()}%", "asset": "USDC", "label": "Core"},
-        {"protocol": "Uniswap V3", "yield": f"{get_uniswap_yield()}%", "asset": "USDC/ETH", "label": "Core"}
-    ]
-    
-    external_yields = get_external_opportunities()
-    
-    return {
-        "yields": core_yields + external_yields,
-        "wallet": get_wallet_balances(),
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-def save_to_db(aave_rate, uni_rate):
-    if not DB_URL: return
+    """
+    Fetches yield data from the Postgres 'yields' table 
+    and formats it for the VaultLogic Command Center.
+    """
+    conn = None
     try:
-        conn = psycopg2.connect(DB_URL)
+        # Connect to your existing Railway Postgres
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
         cur = conn.cursor()
-        cur.execute("INSERT INTO yields (aave_rate, uniswap_rate, timestamp) VALUES (%s, %s, %s)", (float(aave_rate), float(uni_rate), datetime.now()))
-        conn.commit()
+        
+        # Query your existing yields table
+        # Adjust 'protocol', 'apy', and 'asset' names if your columns are named differently
+        cur.execute("SELECT protocol, apy, asset FROM yields ORDER BY apy DESC LIMIT 5;")
+        rows = cur.fetchall()
+        
         cur.close()
         conn.close()
-    except Exception: pass
+        
+        # Return the list of dictionaries to main.py
+        return rows
 
-async def heartbeat_monitor():
-    while True:
-        try:
-            aave_val = get_aave_yield()
-            uni_val = get_uniswap_yield()
-            save_to_db(aave_val, uni_val)
-        except Exception: pass
-        await asyncio.sleep(300)
+    except Exception as e:
+        print(f"Scout Error: {e}")
+        if conn:
+            conn.close()
+        # Fallback to empty list so main.py doesn't crash
+        return []
+
+# Optional: Mock data for testing if the table is currently empty
+# def get_all_yields():
+#     return [
+#         {"protocol": "AAVE V3", "apy": "12.45", "asset": "USDC"},
+#         {"protocol": "MORPHO", "apy": "9.10", "asset": "ETH"}
+#     ]
