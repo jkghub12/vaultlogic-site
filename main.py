@@ -31,7 +31,7 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF ---
+# --- STRATEGY BRIEF (POLISHED) ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -62,17 +62,31 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT ---
+# --- COMPLIANCE AUDIT (RESTORED BUTTON) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
     <html>
-        <head><style>body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px;text-align:center;}h1{color:#00ffcc;}</style></head>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
+                h1{color:#00ffcc;letter-spacing:2px;}
+                .box{max-width:600px; margin:0 auto; padding:30px; border:1px solid #222; border-radius:12px; background:#111;}
+                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase;}
+                .status{margin:20px 0; font-size:14px;}
+            </style>
+        </head>
         <body>
-            <h1>2026 CLARITY ACT AUDIT</h1>
-            <p>Yield Classification: ✅ VERIFIED (Liquidity Provision)</p>
-            <p>Passive Interest Risk: 🚨 HIGH (Direct Interest Found)</p>
-            <a href="/" style="color:#666;text-decoration:none;">← RETURN</a>
+            <div class="box">
+                <h1>2026 CLARITY ACT AUDIT</h1>
+                <div class="status">
+                    <p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED (Liquidity Provision)</span></p>
+                    <p>Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH (Direct Interest Found)</span></p>
+                </div>
+                <a href="#" class="btn" onclick="alert('Demo Mode: Report generation will be enabled in Phase 1.7')">GENERATE DEFENSE REPORT</a><br>
+                <a href="/" style="display:block; margin-top:30px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase;">← Return to Command Center</a>
+            </div>
         </body>
     </html>
     """
@@ -129,27 +143,21 @@ async def get_vault(request: Request):
             <script>
                 async function syncWallet() {{
                     const btn = document.getElementById('sync-button');
-                    // Check if ANY wallet extension is installed
                     if (typeof window.ethereum !== 'undefined') {{
                         try {{
                             const provider = new ethers.providers.Web3Provider(window.ethereum);
                             await provider.send("eth_requestAccounts", []);
                             const signer = provider.getSigner();
                             const address = await signer.getAddress();
-                            
                             btn.innerText = "SYNCED: " + address.substring(0,6) + "...";
-                            btn.style.background = "#fff";
-
                             await fetch("/connect-wallet", {{ 
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: address }}) 
                             }});
-                        }} catch (err) {{
-                            console.error("User rejected the connection.");
-                        }}
+                        }} catch (err) {{ console.error(err); }}
                     }} else {{
-                        alert("Please install a Web3 wallet (MetaMask, Coinbase, etc.) to sync.");
+                        alert("Please install a Web3 wallet to sync.");
                     }}
                 }}
             </script>
