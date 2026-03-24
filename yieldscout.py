@@ -1,52 +1,25 @@
-import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-DATABASE_URL = os.getenv("DATABASE_URL")
+import requests
 
 def get_all_yields():
-    """
-    Fetches yield data from Postgres. 
-    Automatically creates the table if it was deleted.
-    """
-    conn = None
+    """Fetches real-time yields from the Base network via DefiLlama."""
     try:
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-        cur = conn.cursor()
-        
-        # 1. Ensure the yields table exists so we don't get the "Relation does not exist" error
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS yields (
-                id SERIAL PRIMARY KEY,
-                protocol TEXT,
-                apy TEXT,
-                asset TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.commit()
-
-        # 2. Check if the table is empty. If it is, insert a few "Starter" rows for your demo.
-        cur.execute("SELECT COUNT(*) FROM yields;")
-        if cur.fetchone()['count'] == 0:
-            cur.execute("""
-                INSERT INTO yields (protocol, apy, asset) VALUES 
-                ('AAVE V3 (Base)', '12.4', 'USDC'),
-                ('UNISWAP V3', '18.2', 'ETH/USDC'),
-                ('MORPHO BLUE', '9.5', 'WETH');
-            """)
-            conn.commit()
-
-        # 3. Now pull the data for main.py
-        cur.execute("SELECT protocol, apy, asset FROM yields ORDER BY apy DESC LIMIT 5;")
-        rows = cur.fetchall()
-        
-        cur.close()
-        conn.close()
-        return rows
-
+        response = requests.get("https://yields.llama.fi/pools", timeout=10)
+        if response.status_code == 200:
+            all_pools = response.json()['data']
+            # Filter for Base network and high TVL (> $1M) to ensure quality
+            base_pools = [
+                {
+                    "protocol": p['project'].upper(),
+                    "apy": round(float(p['apy']), 2),
+                    "asset": p['symbol']
+                }
+                for p in all_pools 
+                if p.get('chain') == 'Base' and p.get('tvlUsd', 0) > 1000000
+            ]
+            # Return the top 5 by APY
+            return sorted(base_pools, key=lambda x: x['apy'], reverse=True)[:5]
     except Exception as e:
-        print(f"Scout Error: {e}")
-        if conn:
-            conn.close()
-        return []
+        print(f"API Error: {e}")
+    
+    # Fallback in case of API failure
+    return [{"protocol": "AAVE", "apy": "11.2", "asset": "USDC"}]
