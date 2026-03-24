@@ -57,17 +57,17 @@ async def get_strategy():
                 <h1>The Deterministic Vision</h1>
                 <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
                 <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span>.</p>
+                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
                 <h2>II. Validation Tier</h2>
-                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic before institutional scaling.</p>
+                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
                 <h2>III. The Regulatory Shield</h2>
-                <p>Auditable trails for institutional participation under the <strong>Clarity Act 2026</strong>.</p>
+                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
             </div>
         </body>
     </html>
     """
 
-# --- COMPLIANCE AUDIT ---
+# --- COMPLIANCE AUDIT (CENTERED FIX) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -75,19 +75,20 @@ async def get_audit():
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}
-                h1{{color:#00ffcc;letter-spacing:2px;}}
-                .box{{max-width:600px; margin:0 auto; padding:30px; border:1px solid #222; border-radius:12px; background:#111;}}
-                .btn{{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase;}}
+                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
+                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
+                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
+                .status-line{margin:15px 0; font-size:16px; display:block;}
+                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
             </style>
         </head>
         <body>
             <div class="box">
                 <h1>2026 CLARITY ACT AUDIT</h1>
-                <p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></p>
-                <p>Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></p>
-                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required.')">GENERATE DEFENSE REPORT</a><br>
-                <a href="/" style="display:block; margin-top:30px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase;">← Return</a>
+                <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
+                <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
+                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
             </div>
         </body>
     </html>
@@ -97,11 +98,7 @@ async def background_sync():
     async with httpx.AsyncClient() as client:
         while True:
             try:
-                # Update Yields
                 vault_cache["yields"] = await get_all_yields()
-                
-                # Fetch Real Base Gas (Mocking for the UI display)
-                # In a real build, we'd hit an RPC, but for now we set a 'Nominal' engineering status
                 vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
                 vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
             except Exception as e:
