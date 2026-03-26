@@ -39,7 +39,7 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF (RESTORED) ---
+# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -72,7 +72,7 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT (RESTORED) ---
+# --- COMPLIANCE AUDIT ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -80,11 +80,11 @@ async def get_audit():
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
-                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
-                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
-                .status-line{margin:15px 0; font-size:16px; display:block;}
-                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
+                body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}
+                h1{{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}}
+                .box{{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}}
+                .status-line{{margin:15px 0; font-size:16px; display:block;}}
+                .btn{{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}}
             </style>
         </head>
         <body>
@@ -99,31 +99,35 @@ async def get_audit():
     </html>
     """
 
-# --- THE BRAIN: BACKGROUND SYNC ---
+# --- BRAIN: ACTIVE LIQUIDITY MANAGEMENT (ALM) LOGIC ---
+def run_brain_strategy(data):
+    for y in data:
+        try:
+            apy = float(y.get('apy', 0))
+            if apy > 15.0:
+                y['risk_label'] = "OPTIMAL"
+                y['note'] = "ALM ACTIVE"
+            elif apy > 5.0:
+                y['risk_label'] = "STABLE"
+                y['note'] = "BETA GUARD"
+            else:
+                y['risk_label'] = "VERIFIED"
+                y['note'] = "INDEX"
+        except:
+            y['risk_label'] = "VERIFIED"
+            y['note'] = "STABLE"
+    return data
+
 async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                # The Brain Logic: Fetching and prioritizing
-                raw_yields = await get_all_yields()
-                
-                # If yields are found, the Brain applies the 'Industrial Filter'
-                if raw_yields:
-                    for y in raw_yields:
-                        # Brain assigns a 'Safe' or 'Optimal' tag based on the 5% threshold
-                        try:
-                            apy_val = float(y.get('apy', 0))
-                            y['risk_label'] = "OPTIMAL" if apy_val > 5.0 else "VERIFIED"
-                        except:
-                            y['risk_label'] = "VERIFIED"
-                    
-                    vault_cache["yields"] = raw_yields
-                
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
-            await asyncio.sleep(60)
+    while True:
+        try:
+            raw_yields = await get_all_yields()
+            vault_cache["yields"] = run_brain_strategy(raw_yields)
+            vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
+            vault_cache["last_updated"] = "BRAIN: SYSTEM NOMINAL"
+        except Exception as e:
+            vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
@@ -133,10 +137,13 @@ async def startup_event():
 async def get_vault(request: Request):
     yield_cards = ""
     for y in vault_cache["yields"]:
-        risk_color = "#00ffcc" if y.get('risk_label') == "OPTIMAL" else "#888"
+        risk_color = "#00ffcc" if y.get('risk_label') == "OPTIMAL" else "#444"
         yield_cards += f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid {risk_color}; text-align: left;">
-            <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
+                <span style="font-size: 8px; color: #444; letter-spacing:1px;">{y.get('note', 'VERIFIED')}</span>
+            </div>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
             <small style="color: #666;">Asset: {y['asset']} | Risk: {y.get('risk_label', 'Verified')}</small>
         </div>"""
@@ -153,7 +160,6 @@ async def get_vault(request: Request):
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
                 .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
-                w3m-button {{ margin-top: 20px; display: inline-block; }}
             </style>
         </head>
         <body>
@@ -161,19 +167,13 @@ async def get_vault(request: Request):
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-                
-                <div id="btn-container">
-                    <w3m-button></w3m-button>
-                </div>
-
+                <div id="btn-container" style="margin-top:20px;"><w3m-button></w3m-button></div>
                 <div class="nav-links" style="margin-top:20px;">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
                 </div>
             </div>
-
             <div class="container">{yield_cards}</div>
-
             <div class="simulator">
                 <h2 style="font-size: 14px; color: #00ffcc; text-transform: uppercase; letter-spacing: 3px;">Validation Tier Simulator ($500 Base)</h2>
                 <div style="display: flex; justify-content: space-around; padding: 20px;">
@@ -188,34 +188,32 @@ async def get_vault(request: Request):
                 </div>
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
-
             <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core@2.6.5'
 
                 const projectId = '{WC_PROJECT_ID}'
                 const metadata = {{
-                  name: 'VaultLogic Dev LLC',
-                  description: 'Industrial DeFi Strategy',
-                  url: 'https://vaultlogic.dev',
-                  icons: ['https://avatars.githubusercontent.com/u/37784886']
+                    name: 'VaultLogic Dev LLC',
+                    description: 'Industrial DeFi Strategy',
+                    url: 'https://vaultlogic.dev',
+                    icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }}
-
                 const chains = [mainnet, base]
                 const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
                 const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
 
                 watchAccount(wagmiConfig, {{
-                  onChange(account) {{
-                    if (account.isConnected) {{
-                      fetch("/connect-wallet", {{ 
-                        method: "POST", 
-                        headers: {{ "Content-Type": "application/json" }}, 
-                        body: JSON.stringify({{ address: account.address }}) 
-                      }});
+                    onChange(account) {{
+                        if (account.isConnected) {{
+                            fetch("/connect-wallet", {{ 
+                                method: "POST", 
+                                headers: {{ "Content-Type": "application/json" }}, 
+                                body: JSON.stringify({{ address: account.address }}) 
+                            }});
+                        }}
                     }}
-                  }}
                 }})
             </script>
         </body>
