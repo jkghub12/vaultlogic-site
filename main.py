@@ -168,7 +168,7 @@ async def get_vault(request: Request):
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
                 .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
-                #wallet-box {{ margin: 30px 0; min-height: 50px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10; }}
+                #wallet-box {{ margin: 30px 0; min-height: 80px; width: 100%; display: flex; justify-content: center; align-items: center; z-index: 999; }}
             </style>
         </head>
         <body>
@@ -207,7 +207,7 @@ async def get_vault(request: Request):
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core@2.6.5'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.6.5'
 
                 const projectId = '{WC_PROJECT_ID}'
                 const metadata = {{
@@ -218,17 +218,23 @@ async def get_vault(request: Request):
                 }}
                 const chains = [mainnet, base]
                 const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
-                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
+                
+                // Initialize Modal
+                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains, themeMode: 'dark' }})
 
+                // Auto-reconnect if session exists
+                reconnect(wagmiConfig)
+
+                // Database Watcher
                 watchAccount(wagmiConfig, {{
                     onChange(account) {{
-                        if (account.isConnected) {{
+                        if (account.isConnected && account.address) {{
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: account.address }}) 
                             }}).catch(err => console.error("Database sync failed:", err));
-                        }}
+                        }
                     }}
                 }})
             </script>
