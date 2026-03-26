@@ -1,9 +1,6 @@
 fastapi
 uvicorn
 python-dotenv
-coinbase-agentkit
-coinbase-agentkit-langchain
-eth-account
-requests
+httpx
 psycopg2-binary
-web3
+pydantic
