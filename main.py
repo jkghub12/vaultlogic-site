@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# Fallback for yieldscout to prevent startup crashes
+# Fallback for yieldscout
 try:
     from yieldscout import get_all_yields
 except ImportError:
@@ -39,7 +39,6 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -60,19 +59,18 @@ async def get_strategy():
             <div class="container">
                 <a href="/" class="back">← Return to Command Center</a>
                 <h1>The Deterministic Vision</h1>
-                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
+                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems.</p>
                 <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
+                <p>Phase Alpha focuses on Active Liquidity Management.</p>
                 <h2>II. Validation Tier</h2>
-                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
+                <p>Current stress-testing performed at the <strong>$500 entry level</strong>.</p>
                 <h2>III. The Regulatory Shield</h2>
-                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
+                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail.</p>
             </div>
         </body>
     </html>
     """
 
-# --- COMPLIANCE AUDIT ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -80,18 +78,11 @@ async def get_audit():
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body {
-                    background: #0a0a0a; color: #eee; font-family: sans-serif; margin: 0;
-                    display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center;
-                }
+                body { background: #0a0a0a; color: #eee; font-family: sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
                 .box { max-width: 500px; width: 90%; padding: 40px; border: 1px solid #222; border-radius: 12px; background: #111; }
                 h1 { color: #00ffcc; letter-spacing: 2px; margin-bottom: 30px; font-size: 22px; }
                 .status-line { margin: 20px 0; font-size: 16px; display: block; }
-                .btn { 
-                    display: inline-block; margin-top: 30px; padding: 15px 30px; background: #00ffcc; 
-                    color: #000; text-decoration: none; font-weight: bold; border-radius: 4px; font-size: 12px; 
-                    text-transform: uppercase; letter-spacing: 1px; 
-                }
+                .btn { display: inline-block; margin-top: 30px; padding: 15px 30px; background: #00ffcc; color: #000; text-decoration: none; font-weight: bold; border-radius: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
                 .back-link { display: block; margin-top: 40px; color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
             </style>
         </head>
@@ -100,14 +91,13 @@ async def get_audit():
                 <h1>2026 CLARITY ACT AUDIT</h1>
                 <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
                 <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
-                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required.')">GENERATE DEFENSE REPORT</a>
                 <a href="/" class="back-link">← Return to Command Center</a>
             </div>
         </body>
     </html>
     """
 
-# --- BRAIN: ACTIVE LIQUIDITY MANAGEMENT (ALM) LOGIC ---
 def run_brain_strategy(data):
     for y in data:
         try:
@@ -156,6 +146,7 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']} | Risk: {y.get('risk_label', 'Verified')}</small>
         </div>"""
 
+    # We use double braces {{ }} here because this is inside an f-string
     return f"""
     <html>
         <head>
@@ -168,7 +159,7 @@ async def get_vault(request: Request):
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
                 .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
-                #wallet-box {{ margin: 30px 0; min-height: 80px; width: 100%; display: flex; justify-content: center; align-items: center; z-index: 999; }}
+                .failsafe-btn {{ background: #00ffcc; color: #000; border: none; padding: 12px 24px; font-weight: bold; border-radius: 4px; cursor: pointer; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; margin: 20px 0; display: none; }}
             </style>
         </head>
         <body>
@@ -177,8 +168,9 @@ async def get_vault(request: Request):
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
                 
-                <div id="wallet-box">
-                    <w3m-button></w3m-button>
+                <div id="wallet-box" style="margin: 30px 0; min-height: 60px;">
+                    <w3m-button id="main-wallet-btn"></w3m-button>
+                    <button id="fallback-btn" class="failsafe-btn">Connect Wallet</button>
                 </div>
 
                 <div class="nav-links">
@@ -194,14 +186,13 @@ async def get_vault(request: Request):
                 <div style="display: flex; justify-content: space-around; padding: 20px;">
                     <div style="text-align: left;">
                         <p style="margin:0; font-size: 11px; color: #666;">PASSIVE HOLDING (2.8%)</p>
-                        <p style="margin:0; font-size: 20px;">$500.55 <small style="font-size: 10px; color: #ff4444;">(-$0.00 Fee)</small></p>
+                        <p style="margin:0; font-size: 20px;">$500.55</p>
                     </div>
                     <div style="text-align: right;">
                         <p style="margin:0; font-size: 11px; color: #00ffcc;">VAULTLOGIC ACTIVE (ALM)</p>
-                        <p style="margin:0; font-size: 20px;">$534.20 <small style="font-size: 10px; color: #00ffcc;">(+$34.20 Proj.)</small></p>
+                        <p style="margin:0; font-size: 20px;">$534.20</p>
                     </div>
                 </div>
-                <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
             <script type="module">
@@ -218,14 +209,20 @@ async def get_vault(request: Request):
                 }}
                 const chains = [mainnet, base]
                 const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
-                
-                // Initialize Modal
                 const modal = createWeb3Modal({{ wagmiConfig, projectId, chains, themeMode: 'dark' }})
 
-                // Auto-reconnect if session exists
                 reconnect(wagmiConfig)
 
-                // Database Watcher
+                // Check if the custom element failed to render
+                setTimeout(() => {{
+                    const w3m = document.querySelector('w3m-button');
+                    if (!w3m || w3m.offsetWidth === 0) {{
+                        document.getElementById('fallback-btn').style.display = 'inline-block';
+                    }}
+                }}, 3000);
+
+                document.getElementById('fallback-btn').onclick = () => modal.open();
+
                 watchAccount(wagmiConfig, {{
                     onChange(account) {{
                         if (account.isConnected && account.address) {{
@@ -234,7 +231,7 @@ async def get_vault(request: Request):
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: account.address }}) 
                             }}).catch(err => console.error("Database sync failed:", err));
-                        }
+                        }}
                     }}
                 }})
             </script>
