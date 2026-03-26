@@ -72,7 +72,7 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT (FORMATTED & CENTERED) ---
+# --- COMPLIANCE AUDIT ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -81,48 +81,18 @@ async def get_audit():
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 body {
-                    background: #0a0a0a; 
-                    color: #eee; 
-                    font-family: sans-serif; 
-                    margin: 0;
-                    display: flex; 
-                    justify-content: center; 
-                    align-items: center; 
-                    min-height: 100vh;
-                    text-align: center;
+                    background: #0a0a0a; color: #eee; font-family: sans-serif; margin: 0;
+                    display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center;
                 }
-                .box {
-                    max-width: 500px; 
-                    width: 90%;
-                    padding: 40px; 
-                    border: 1px solid #222; 
-                    border-radius: 12px; 
-                    background: #111; 
-                }
+                .box { max-width: 500px; width: 90%; padding: 40px; border: 1px solid #222; border-radius: 12px; background: #111; }
                 h1 { color: #00ffcc; letter-spacing: 2px; margin-bottom: 30px; font-size: 22px; }
                 .status-line { margin: 20px 0; font-size: 16px; display: block; }
                 .btn { 
-                    display: inline-block; 
-                    margin-top: 30px; 
-                    padding: 15px 30px; 
-                    background: #00ffcc; 
-                    color: #000; 
-                    text-decoration: none; 
-                    font-weight: bold; 
-                    border-radius: 4px; 
-                    font-size: 12px; 
-                    text-transform: uppercase; 
-                    letter-spacing: 1px; 
+                    display: inline-block; margin-top: 30px; padding: 15px 30px; background: #00ffcc; 
+                    color: #000; text-decoration: none; font-weight: bold; border-radius: 4px; font-size: 12px; 
+                    text-transform: uppercase; letter-spacing: 1px; 
                 }
-                .back-link {
-                    display: block; 
-                    margin-top: 40px; 
-                    color: #666; 
-                    text-decoration: none; 
-                    font-size: 11px; 
-                    text-transform: uppercase; 
-                    letter-spacing: 2px;
-                }
+                .back-link { display: block; margin-top: 40px; color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
             </style>
         </head>
         <body>
@@ -198,6 +168,7 @@ async def get_vault(request: Request):
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
                 .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
+                #wallet-box {{ margin: 30px 0; min-height: 50px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10; }}
             </style>
         </head>
         <body>
@@ -206,7 +177,7 @@ async def get_vault(request: Request):
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
                 
-                <div style="margin: 30px 0; min-height: 40px;">
+                <div id="wallet-box">
                     <w3m-button></w3m-button>
                 </div>
 
@@ -256,7 +227,7 @@ async def get_vault(request: Request):
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: account.address }}) 
-                            }});
+                            }}).catch(err => console.error("Database sync failed:", err));
                         }}
                     }}
                 }})
