@@ -72,7 +72,7 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT ---
+# --- COMPLIANCE AUDIT (FORMATTED & CENTERED) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -80,11 +80,49 @@ async def get_audit():
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}
-                h1{{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}}
-                .box{{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}}
-                .status-line{{margin:15px 0; font-size:16px; display:block;}}
-                .btn{{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}}
+                body {
+                    background: #0a0a0a; 
+                    color: #eee; 
+                    font-family: sans-serif; 
+                    margin: 0;
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    min-height: 100vh;
+                    text-align: center;
+                }
+                .box {
+                    max-width: 500px; 
+                    width: 90%;
+                    padding: 40px; 
+                    border: 1px solid #222; 
+                    border-radius: 12px; 
+                    background: #111; 
+                }
+                h1 { color: #00ffcc; letter-spacing: 2px; margin-bottom: 30px; font-size: 22px; }
+                .status-line { margin: 20px 0; font-size: 16px; display: block; }
+                .btn { 
+                    display: inline-block; 
+                    margin-top: 30px; 
+                    padding: 15px 30px; 
+                    background: #00ffcc; 
+                    color: #000; 
+                    text-decoration: none; 
+                    font-weight: bold; 
+                    border-radius: 4px; 
+                    font-size: 12px; 
+                    text-transform: uppercase; 
+                    letter-spacing: 1px; 
+                }
+                .back-link {
+                    display: block; 
+                    margin-top: 40px; 
+                    color: #666; 
+                    text-decoration: none; 
+                    font-size: 11px; 
+                    text-transform: uppercase; 
+                    letter-spacing: 2px;
+                }
             </style>
         </head>
         <body>
@@ -92,8 +130,8 @@ async def get_audit():
                 <h1>2026 CLARITY ACT AUDIT</h1>
                 <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
                 <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
-                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
-                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a>
+                <a href="/" class="back-link">← Return to Command Center</a>
             </div>
         </body>
     </html>
@@ -167,13 +205,19 @@ async def get_vault(request: Request):
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-                <div id="btn-container" style="margin-top:20px;"><w3m-button></w3m-button></div>
-                <div class="nav-links" style="margin-top:20px;">
+                
+                <div style="margin: 30px 0; min-height: 40px;">
+                    <w3m-button></w3m-button>
+                </div>
+
+                <div class="nav-links">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
                 </div>
             </div>
+
             <div class="container">{yield_cards}</div>
+
             <div class="simulator">
                 <h2 style="font-size: 14px; color: #00ffcc; text-transform: uppercase; letter-spacing: 3px;">Validation Tier Simulator ($500 Base)</h2>
                 <div style="display: flex; justify-content: space-around; padding: 20px;">
@@ -188,6 +232,7 @@ async def get_vault(request: Request):
                 </div>
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
+
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
