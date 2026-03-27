@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from yieldscout import get_all_yields
+from engine import run_alm_engine
 
 app = FastAPI()
 
@@ -114,7 +115,12 @@ async def background_sync():
 
 @app.on_event("startup")
 async def startup_event():
+    # Keep your existing sync
     asyncio.create_task(background_sync())
+    
+    # ADD THIS: Run a test cycle for the system itself to confirm logs work
+    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
+    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
