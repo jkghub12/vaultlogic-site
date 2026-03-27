@@ -225,19 +225,9 @@ async def get_vault(request: Request):
                   icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }}
 
-                
-		const modal = createWeb3Modal({ 
-    			wagmiConfig, 
-    			projectId, 
-    			chains,
-    		// These IDs correspond to Coinbase Wallet and MetaMask.
-    		// They will appear at the top of the list for everyone.
-    		featuredWalletIds: [
-        	'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081', // Coinbase
-        	'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'  // MetaMask
-    		]
-		})
-
+                const chains = [mainnet, base]
+                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
+                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
 
                 watchAccount(wagmiConfig, {{
                   onChange(account) {{
