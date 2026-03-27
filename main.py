@@ -212,35 +212,61 @@ async def get_vault(request: Request):
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
-            <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+           <script type="module">
+    import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
+    import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+    import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
-                const metadata = {{
-                  name: 'VaultLogic Dev LLC',
-                  description: 'Industrial DeFi Strategy',
-                  url: 'https://vaultlogic.dev',
-                  icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }}
+    const projectId = '{WC_PROJECT_ID}'
+    const metadata = {{
+      name: 'VaultLogic Dev LLC',
+      description: 'Industrial DeFi Strategy',
+      url: 'https://vaultlogic.dev',
+      icons: ['https://avatars.githubusercontent.com/u/37784886']
+    }}
 
-                const chains = [mainnet, base]
-                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
-                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
+    const chains = [base, mainnet] 
+    const wagmiConfig = defaultWagmiConfig({{ 
+        chains, 
+        projectId, 
+        metadata,
+        defaultChain: base 
+    }})
+    
+    const modal = createWeb3Modal({{ 
+        wagmiConfig, 
+        projectId, 
+        chains,
+        featuredWalletIds: [
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
+        ]
+    }})
 
-                watchAccount(wagmiConfig, {{
-                  onChange(account) {{
-                    if (account.isConnected) {{
-                      fetch("/connect-wallet", {{ 
-                        method: "POST", 
-                        headers: {{ "Content-Type": "application/json" }}, 
-                        body: JSON.stringify({{ address: account.address }}) 
-                      }});
-                    }}
-                  }}
-                }})
-            </script>
+    let isSyncing = false;
+
+    watchAccount(wagmiConfig, {{
+      async onChange(account) {{
+        if (account.isConnected && !isSyncing && !sessionStorage.getItem('vl_synced')) {{
+          isSyncing = true;
+          
+          const response = await fetch("/connect-wallet", {{ 
+            method: "POST", 
+            headers: {{ "Content-Type": "application/json" }}, 
+            body: JSON.stringify({{ address: account.address }}) 
+          }});
+          
+          if (response.ok) {{
+            sessionStorage.setItem('vl_synced', 'true');
+            // 2-second delay ensures the Python background task finishes the balance check
+            setTimeout(() => {{ window.location.reload(); }}, 2000);
+          }}
+        }} else if (!account.isConnected) {{
+            sessionStorage.removeItem('vl_synced');
+        }}
+      }}
+    }})
+</script>
         </body>
     </html>
     """
