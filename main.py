@@ -225,47 +225,17 @@ async def get_vault(request: Request):
                   icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }}
 
-                // 1. Put Base first in the list. 
-// This makes it the 'preferred' network for the UI.
-const chains = [base, mainnet] 
+                const chains = [mainnet, base]
+                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
+                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
 
-const wagmiConfig = defaultWagmiConfig({ 
-    chains, 
-    projectId, 
-    metadata,
-    // 2. This is the 'Master Switch'. 
-    // It tells the modal: "Open on Base by default."
-    defaultChain: base 
-})
-		
-
-               let isSyncing = false; 
-
-watchAccount(wagmiConfig, {
-  async onChange(account) {
-    // Only fire if: 1. Connected, 2. Not already syncing, 3. Haven't synced this session
-    if (account.isConnected && !isSyncing && !sessionStorage.getItem('vl_synced')) {
-      isSyncing = true;
-      
-      const response = await fetch("/connect-wallet", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ address: account.address }) 
-      });
-      
-      if (response.ok) {
-        // This 'fuse' prevents the page from reloading in an infinite loop
-        sessionStorage.setItem('vl_synced', 'true');
-        
-        // Brief pause to let the Python 'fetch_wallet_balances' task complete
-        setTimeout(() => { window.location.reload(); }, 1500);
-      }
-    } else if (!account.isConnected) {
-        // If they disconnect, reset the fuse so they can log in again later
-        sessionStorage.removeItem('vl_synced');
-    }
-  }
-})
+                watchAccount(wagmiConfig, {{
+                  onChange(account) {{
+                    if (account.isConnected) {{
+                      fetch("/connect-wallet", {{ 
+                        method: "POST", 
+                        headers: {{ "Content-Type": "application/json" }}, 
+                        body: JSON.stringify({{ address: account.address }}) 
                       }});
                     }}
                   }}
@@ -274,4 +244,3 @@ watchAccount(wagmiConfig, {
         </body>
     </html>
     """
-#main
