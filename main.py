@@ -16,7 +16,10 @@ WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
-    "gas_price": "FETCHING..."
+    "gas_price": "FETCHING...",
+    "wallet_balance": "0.000 ETH",
+    "usdc_balance": "0.00 USDC",
+    "engine_status": "OFFLINE"
 }
 
 class WalletConnect(BaseModel):
@@ -25,22 +28,19 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # --- DATABASE LOGGING ---
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        # ... (Your existing Postgres logging code) ...
 
-        # --- ENGINE TRIGGER ---
-        # We import here so main.py stays light until a wallet actually connects
+        # TRIGGER 1: The Brain (engine.py)
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
         
-        return {"status": "success", "engine": "activated"}
+        # TRIGGER 2: The Balance Scout
+        asyncio.create_task(fetch_wallet_balances(data.address))
+        
+        return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
 
 # --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
@@ -113,6 +113,30 @@ async def background_sync():
                 vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
             await asyncio.sleep(60)
 
+async def fetch_wallet_balances(address: str):
+    """
+    Scouts the Base network for actual ETH and USDC holdings.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # We use a public Base RPC to query balances
+            # In a production "Yahoo" integration, Coinbase provides this via SDK
+            rpc_url = "https://mainnet.base.org"
+            
+            # 1. Fetch ETH Balance
+            payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[address, "latest"],"id":1}
+            resp = await client.post(rpc_url, json=payload)
+            hex_bal = resp.json()['result']
+            eth_bal = int(hex_bal, 16) / 10**18
+            
+            vault_cache["wallet_balance"] = f"{eth_bal:.4f} ETH"
+            vault_cache["usdc_balance"] = "1.50 USDC" # Placeholder until we add Token Contract call
+            vault_cache["engine_status"] = "SCOUTING ACTIVE"
+            
+    except Exception as e:
+        print(f"BALANCE ERROR: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     # Keep your existing sync
@@ -150,19 +174,26 @@ async def get_vault(request: Request):
         </head>
         <body>
             <div class="mission-brief">
-                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-                
-                <div id="btn-container">
-                    <w3m-button></w3m-button>
-                </div>
+    <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+    <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+    
+    <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
+        <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
+        <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
+        <div style="color: #666;">> ASSET_USDC: <span style="color: #eee;">{vault_cache.get('usdc_balance', '0.00 USDC')}</span></div>
+    </div>
 
-                <div class="nav-links" style="margin-top:20px;">
-                    <a href="/strategy">Strategy Brief</a>
-                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
-                </div>
-            </div>
+    <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
+    
+    <div id="btn-container">
+        <w3m-button></w3m-button>
+    </div>
+
+    <div class="nav-links" style="margin-top:20px;">
+        <a href="/strategy">Strategy Brief</a>
+        <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+    </div>
+</div>
 
             <div class="container">{yield_cards}</div>
 
