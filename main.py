@@ -24,13 +24,20 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
+        # --- DATABASE LOGGING ---
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
         conn.commit()
         cur.close()
         conn.close()
-        return {"status": "success"}
+
+        # --- ENGINE TRIGGER ---
+        # We import here so main.py stays light until a wallet actually connects
+        from engine import run_alm_engine 
+        asyncio.create_task(run_alm_engine(data.address))
+        
+        return {"status": "success", "engine": "activated"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
