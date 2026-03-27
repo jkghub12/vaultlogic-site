@@ -213,17 +213,64 @@ async def get_vault(request: Request):
             </div>
 
             <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+    import { createWeb3Modal, defaultWagmiConfig } from 'https://esm.sh/@web3modal/wagmi'
+    import { mainnet, base } from 'https://esm.sh/viem/chains'
+    import { watchAccount } from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
-                const metadata = {{
-                  name: 'VaultLogic Dev LLC',
-                  description: 'Industrial DeFi Strategy',
-                  url: 'https://vaultlogic.dev',
-                  icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }}
+    const projectId = '{WC_PROJECT_ID}'
+    const metadata = {
+      name: 'VaultLogic Dev LLC',
+      description: 'Industrial DeFi Strategy',
+      url: 'https://vaultlogic.dev',
+      icons: ['https://avatars.githubusercontent.com/u/37784886']
+    }
+
+    // BASE is first in the array to prioritize it
+    const chains = [base, mainnet] 
+    const wagmiConfig = defaultWagmiConfig({ 
+        chains, 
+        projectId, 
+        metadata,
+        defaultChain: base // Forces Base as the primary network
+    })
+    
+    const modal = createWeb3Modal({ 
+        wagmiConfig, 
+        projectId, 
+        chains,
+        featuredWalletIds: [
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081' // Coinbase Wallet ID
+        ]
+    })
+
+    // Safety check to prevent reload loops
+    let isSyncing = false;
+
+    watchAccount(wagmiConfig, {
+      async onChange(account) {
+        // Only trigger if connected AND we aren't already in the middle of a sync
+        if (account.isConnected && !isSyncing && !sessionStorage.getItem('vl_synced')) {
+          isSyncing = true;
+          
+          const response = await fetch("/connect-wallet", { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ address: account.address }) 
+          });
+          
+          if (response.ok) {
+            // Mark as synced so we don't loop
+            sessionStorage.setItem('vl_synced', 'true');
+            // Give the server 2 seconds to run the balance scout
+            setTimeout(() => { window.location.reload(); }, 2000);
+          }
+        } else if (!account.isConnected) {
+            // Clear the sync flag if they manually disconnect
+            sessionStorage.removeItem('vl_synced');
+        }
+      }
+    })
+</script>
 
                 const chains = [mainnet, base]
                 const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
