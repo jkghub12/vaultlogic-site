@@ -65,7 +65,6 @@ async def get_vault(request: Request):
     addr = vault_cache["wallet_address"]
     display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
     
-    # Generate the table only if connected
     balance_table = ""
     if addr:
         balance_table = f"""
@@ -119,9 +118,14 @@ async def get_vault(request: Request):
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
                 import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
-                const config = defaultWagmiConfig({{ chains: [mainnet, base], projectId, metadata: {{ name: 'VaultLogic' }} }})
-                createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }})
+                const projectId = '{WC_PROJECT_ID}';
+                const config = defaultWagmiConfig({{ 
+                    chains: [mainnet, base], 
+                    projectId, 
+                    metadata: {{ name: 'VaultLogic' }} 
+                }});
+                
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }});
 
                 watchAccount(config, {{
                     async onChange(acc) {{
@@ -146,11 +150,9 @@ async def get_vault(request: Request):
                                     usdc_balance: usdcVal
                                 }}) 
                             }});
-                            // We don't force reload here to avoid infinite loops, 
-                            // but if balances are 0 on first load, a manual refresh will now show them.
                         }}
-                    }
-                }})
+                    }}
+                }});
             </script>
         </body>
     </html>
