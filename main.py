@@ -8,7 +8,7 @@ app = FastAPI()
 
 # System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.5.1 Online", "Status: Awaiting Wallet Connection..."]
+system_logs = ["VaultLogic Kernel v2.5.3 Online", "Status: Awaiting Wallet Connection..."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -31,7 +31,6 @@ async def get_industrial_yields():
 async def connect(data: WalletConnect):
     try:
         from engine import run_alm_engine
-        # Start the engine logic for the REAL wallet address provided by the user
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "success"}
     except Exception as e:
@@ -72,8 +71,8 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Industrial ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <!-- Ethers.js for real wallet connection -->
-            <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
+            <!-- Switched to Cloudflare CDN for better reliability -->
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
                 body {{ background:#050505; color:white; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align:center; padding:20px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); max-width:1200px; margin:0 auto; gap:10px; }}
@@ -92,7 +91,7 @@ async def home(request: Request):
         </head>
         <body>
             <div class="header-section">
-                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.1</div>
+                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.3</div>
                 <h1 style="letter-spacing:15px; margin:10px 0; color:#fff;">VAULTLOGIC</h1>
                 <p style="color:#666; margin-bottom:30px; font-size:14px;">Institutional Liquidity Management for Long-Term Trusts</p>
                 
@@ -113,50 +112,54 @@ async def home(request: Request):
                 let activeAddress = null;
 
                 async function connectWallet() {{
+                    const btn = document.getElementById('connectBtn');
+                    btn.innerText = "INITIALIZING BRIDGE...";
+                    
+                    // Check if Ethereum provider exists (MetaMask/Coinbase)
                     if (window.ethereum) {{
                         try {{
-                            const provider = new ethers.providers.Web3Provider(window.ethereum);
-                            const accounts = await provider.send("eth_requestAccounts", []);
+                            // Requesting account access directly from the provider
+                            const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
                             activeAddress = accounts[0];
                             
-                            // Update UI
-                            document.getElementById('connectBtn').style.display = 'none';
+                            // Success UI update
+                            btn.style.display = 'none';
                             document.getElementById('walletDisplay').style.display = 'block';
                             document.getElementById('addrText').innerText = activeAddress;
                             
-                            // Initialize Engine with real address
+                            // Handshake with Backend Engine
                             await fetch("/connect-wallet", {{
                                 method: "POST",
                                 headers: {{ "Content-Type": "application/json" }},
                                 body: JSON.stringify({{ address: activeAddress }})
                             }});
+                            
+                            console.log("Success: Engine mapped to", activeAddress);
                         }} catch (err) {{
-                            console.error("Connection rejected", err);
+                            btn.innerText = "CONNECT INSTITUTIONAL WALLET";
+                            console.error("Connection failed:", err);
                         }}
                     }} else {{
-                        alert("Please install a Web3 Wallet (Coinbase or MetaMask)");
+                        btn.innerText = "NO WALLET DETECTED";
+                        alert("Please ensure your Coinbase Wallet or MetaMask extension is turned ON.");
                     }}
                 }}
 
                 async function deployFunds(btn, protocol) {{
                     if (!activeAddress) {{
-                        alert("Please Connect Your Wallet First to Initialize Engine.");
+                        alert("Security: Connect your institutional wallet to authorize deployment.");
                         return;
                     }}
-                    const originalText = btn.innerText;
                     btn.innerText = "ROUTING...";
                     btn.disabled = true;
                     
-                    // Signal the engine to pivot/inject into this specific protocol
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
                         body: JSON.stringify({{ address: "0x_INJECTION_" + protocol.replace(/ /g, "_") }})
                     }});
                     
-                    setTimeout(() => {{
-                        btn.innerText = "ACTIVE";
-                    }}, 2000);
+                    setTimeout(() => {{ btn.innerText = "ACTIVE"; }}, 2000);
                 }}
 
                 setInterval(async () => {{
