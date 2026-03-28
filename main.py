@@ -196,60 +196,65 @@ async def get_vault(request: Request):
             </div>
 
             <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
+    import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
+    import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+    import {{ watchAccount, reconnect, disconnect }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
-                const metadata = {{
-                  name: 'VaultLogic Dev LLC',
-                  description: 'Industrial DeFi Strategy',
-                  url: 'https://vaultlogic.dev',
-                  icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }}
+    const projectId = '{WC_PROJECT_ID}'
+    const metadata = {{
+        name: 'VaultLogic Dev LLC',
+        description: 'Industrial DeFi Strategy',
+        url: 'https://vaultlogic.dev',
+        icons: ['https://avatars.githubusercontent.com/u/37784886']
+    }}
 
-                const chains = [base, mainnet]
-                const wagmiConfig = defaultWagmiConfig({{ 
-                    chains, 
-                    projectId, 
-                    metadata,
-                    defaultChain: base 
-                }})
+    const chains = [base, mainnet]
+    const wagmiConfig = defaultWagmiConfig({{ 
+        chains, 
+        projectId, 
+        metadata,
+        defaultChain: base 
+    }})
 
-                // Keeps address visible after page reload
-                reconnect(wagmiConfig)
+    // 1. Initialize Modal First
+    const modal = createWeb3Modal({{ 
+        wagmiConfig, 
+        projectId, 
+        chains,
+        featuredWalletIds: [
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
+        ]
+    }})
 
-                const modal = createWeb3Modal({{ 
-                    wagmiConfig, 
-                    projectId, 
-                    chains,
-                    featuredWalletIds: [
-                        'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
-                        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
-                    ]
-                }})
+    // 2. Delayed Reconnect: Wait 500ms to let the UI settle 
+    // This prevents the "Previous request active" error
+    setTimeout(() => {{ 
+        reconnect(wagmiConfig); 
+    }}, 500);
 
-                watchAccount(wagmiConfig, {{
-                  onChange(account) {{
-                    if (account.isConnected && account.address) {{
-                      // Circuit breaker: only refresh if UI shows 0.000 ETH
-                      const isInitialState = document.body.innerText.includes('0.000 ETH');
-                      
-                      if (isInitialState) {{
-                        fetch('/connect-wallet', {{ 
-                          method: 'POST', 
-                          headers: {{ 'Content-Type': 'application/json' }}, 
-                          body: JSON.stringify({{ address: account.address }}) 
-                        }}).then(response => {{
-                          if (response.ok) {{
-                            setTimeout(() => {{ window.location.reload(); }}, 2500);
-                          }}
-                        }});
-                      }}
-                    }}
-                  }}
-                }})
-            </script>
+    watchAccount(wagmiConfig, {{
+      onChange(account) {{
+        // Only trigger if we have a fresh, valid connection
+        if (account.isConnected && account.address) {{
+          const isInitialState = document.body.innerText.includes('0.000 ETH');
+          
+          if (isInitialState) {{
+            fetch('/connect-wallet', {{ 
+              method: 'POST', 
+              headers: {{ 'Content-Type': 'application/json' }}, 
+              body: JSON.stringify({{ address: account.address }}) 
+            }}).then(response => {{
+              if (response.ok) {{
+                // Longer timeout to ensure database write finishes
+                setTimeout(() => {{ window.location.reload(); }}, 3000);
+              }}
+            }});
+          }}
+        }}
+      }}
+    }})
+</script>
         </body>
     </html>
     """
