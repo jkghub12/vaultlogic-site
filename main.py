@@ -225,7 +225,6 @@ async def get_vault(request: Request):
       icons: ['https://avatars.githubusercontent.com/u/37784886']
     }}
 
-    // 1. BASE IS FIRST + DEFAULT CHAIN (Solves your Network list issue)
     const chains = [base, mainnet]
     const wagmiConfig = defaultWagmiConfig({{ 
         chains, 
@@ -239,19 +238,14 @@ async def get_vault(request: Request):
         projectId, 
         chains,
         featuredWalletIds: [
-            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081', // Coinbase
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'  // MetaMask
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
         ]
     }})
 
-    // 2. STABLE RELOAD LOGIC
-   watchAccount(wagmiConfig, {{
+    watchAccount(wagmiConfig, {{
       onChange(account) {{
-        // 1. Check if we are connected AND have an address
         if (account.isConnected && account.address) {{
-          
-          // 2. Only talk to the server if the UI currently shows 0.000 ETH
-          // This prevents the 'infinite reload' that breaks the button state
           const isInitialState = document.body.innerText.includes('0.000 ETH');
           
           if (isInitialState) {{
@@ -261,8 +255,6 @@ async def get_vault(request: Request):
               body: JSON.stringify({{ address: account.address }}) 
             }}).then(response => {{
               if (response.ok) {{
-                // 3. Give the wallet 2.5 seconds to "Lock In" the session 
-                // to LocalStorage before we refresh the page.
                 setTimeout(() => {{ 
                   window.location.reload(); 
                 }}, 2500);
