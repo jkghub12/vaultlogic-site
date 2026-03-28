@@ -258,7 +258,7 @@ async def get_vault(request: Request):
                 setTimeout(() => {{ 
                   window.location.reload(); 
                 }}, 2500);
-              }
+              }}
             }});
           }}
         }}
