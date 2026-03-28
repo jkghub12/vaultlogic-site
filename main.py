@@ -40,7 +40,7 @@ async def fetch_wallet_balances(address: str):
                 hex_bal = data['result']
                 eth_bal = int(hex_bal, 16) / 10**18
                 vault_cache["wallet_balance"] = f"{eth_bal:.4f} ETH"
-                vault_cache["usdc_balance"] = "1.50 USDC" # Placeholder
+                vault_cache["usdc_balance"] = "1.50 USDC"
                 vault_cache["engine_status"] = "SCOUTING ACTIVE"
                 vault_cache["is_connected"] = True
     except Exception as e:
@@ -92,13 +92,13 @@ async def get_strategy():
             <div class="container">
                 <a href="/" class="back">← Return to Command Center</a>
                 <h1>The Deterministic Vision</h1>
-                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate manual error and regulatory friction.</p>
+                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems.</p>
                 <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha: Active Liquidity Management. Safety over black-box predictions.</p>
+                <p>Phase Alpha: Active Liquidity Management.</p>
                 <h2>II. Validation Tier</h2>
-                <p>Stress-testing performed at the <strong>$500 entry level</strong>.</p>
+                <p>Stress-testing performed at the $500 level.</p>
                 <h2>III. Regulatory Shield</h2>
-                <p>Auditable trails compliant with the <strong>Clarity Act 2026</strong>.</p>
+                <p>Compliance with the Clarity Act 2026.</p>
             </div>
         </body>
     </html>
@@ -111,10 +111,8 @@ async def get_audit():
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}
-                h1{{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}}
-                .box{{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}}
-                .status-line{{margin:15px 0; font-size:16px; display:block;}}
-                .btn{{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}}
-            </style>
-        </head>
+                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
+                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
+                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
+                .status-line{margin:15px 0; font-size:16px; display:block;}
+                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px
