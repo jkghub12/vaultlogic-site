@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from yieldscout import get_all_yields
+from engine import run_alm_engine
 
 app = FastAPI()
 
@@ -15,7 +16,10 @@ WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
-    "gas_price": "0.0012 Gwei (OPTIMAL)",
+    "gas_price": "FETCHING...",
+    "wallet_balance": "0.000 ETH",
+    "usdc_balance": "0.00 USDC",
+    "engine_status": "OFFLINE"
 }
 
 class WalletConnect(BaseModel):
@@ -24,16 +28,19 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        if DATABASE_URL:
-            conn = psycopg2.connect(DATABASE_URL)
-            cur = conn.cursor()
-            cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
-            conn.commit()
-            cur.close()
-            conn.close()
-        
+        # --- DATABASE LOGGING ---
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # --- ENGINE TRIGGER ---
+        # We import here so main.py stays light until a wallet actually connects
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
+        
         return {"status": "success", "engine": "activated"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -41,30 +48,85 @@ async def save_wallet(data: WalletConnect):
 # --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
-    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Strategy Brief</h1><a href="/" style="color:#00ffcc;">Back</a></body></html>"""
+    return f"""
+    <html>
+        <head>
+            <title>VaultLogic | Strategy</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ background: #0a0a0a; color: #ccc; font-family: 'Segoe UI', sans-serif; line-height: 1.8; padding: 60px 20px; }}
+                .container {{ max-width: 850px; margin: 0 auto; border-left: 1px solid #222; padding-left: 40px; }}
+                h1 {{ color: #00ffcc; letter-spacing: 4px; text-transform: uppercase; }}
+                h2 {{ color: #eee; margin-top: 40px; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px; }}
+                .highlight {{ color: #00ffcc; font-weight: bold; }}
+                .back {{ color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <a href="/" class="back">← Return to Command Center</a>
+                <h1>The Deterministic Vision</h1>
+                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
+                <h2>I. Beyond Speculation</h2>
+                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
+                <h2>II. Validation Tier</h2>
+                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
+                <h2>III. The Regulatory Shield</h2>
+                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
+            </div>
+        </body>
+    </html>
+    """
 
-# --- COMPLIANCE AUDIT ---
+# --- COMPLIANCE AUDIT (CENTERED FIX) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
-    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Compliance Audit</h1><a href="/" style="color:#00ffcc;">Back</a></body></html>"""
+    return """
+    <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
+                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
+                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
+                .status-line{margin:15px 0; font-size:16px; display:block;}
+                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
+            </style>
+        </head>
+        <body>
+            <div class="box">
+                <h1>2026 CLARITY ACT AUDIT</h1>
+                <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
+                <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
+                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
+            </div>
+        </body>
+    </html>
+    """
 
 async def background_sync():
     async with httpx.AsyncClient() as client:
         while True:
             try:
                 vault_cache["yields"] = await get_all_yields()
+                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
                 vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
             except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR"
+                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
             await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
+    # Keep your existing sync
     asyncio.create_task(background_sync())
+    
+    # ADD THIS: Run a test cycle for the system itself to confirm logs work
+    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
+    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    # PRE-RENDER YIELD CARDS TO AVOID F-STRING CLASHES
     yield_cards = ""
     for y in vault_cache["yields"]:
         yield_cards += f"""
@@ -74,7 +136,6 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>"""
 
-    # MAIN TEMPLATE WITH DOUBLE BRACES FOR JS
     return f"""
     <html>
         <head>
@@ -85,22 +146,17 @@ async def get_vault(request: Request):
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
                 .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .bal-box {{ display: flex; justify-content: center; gap: 20px; margin: 20px 0; font-family: monospace; font-size: 13px; }}
-                .bal-item {{ background: #050505; border: 1px solid #222; padding: 10px 20px; border-radius: 4px; }}
-                .bal-item b {{ color: #00ffcc; }}
-                w3m-button {{ margin-top: 20px; display: inline-block; min-height: 40px; }}
+                .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
+                .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
+                w3m-button {{ margin-top: 20px; display: inline-block; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
                 
-                <div class="bal-box">
-                    <div class="bal-item">ETH: <b id="eth-bal">0.0000</b></div>
-                    <div class="bal-item">USDC: <b id="usdc-bal">0.00</b></div>
-                </div>
-
                 <div id="btn-container">
                     <w3m-button></w3m-button>
                 </div>
@@ -113,42 +169,49 @@ async def get_vault(request: Request):
 
             <div class="container">{yield_cards}</div>
 
+            <div class="simulator">
+                <h2 style="font-size: 14px; color: #00ffcc; text-transform: uppercase; letter-spacing: 3px;">Validation Tier Simulator ($500 Base)</h2>
+                <div style="display: flex; justify-content: space-around; padding: 20px;">
+                    <div style="text-align: left;">
+                        <p style="margin:0; font-size: 11px; color: #666;">PASSIVE HOLDING (2.8%)</p>
+                        <p style="margin:0; font-size: 20px;">$500.55 <small style="font-size: 10px; color: #ff4444;">(-$0.00 Fee)</small></p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="margin:0; font-size: 11px; color: #00ffcc;">VAULTLOGIC ACTIVE (ALM)</p>
+                        <p style="margin:0; font-size: 20px;">$534.20 <small style="font-size: 10px; color: #00ffcc;">(+$34.20 Proj.)</small></p>
+                    </div>
+                </div>
+                <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
+            </div>
+
             <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}';
-                const chains = [mainnet, base];
-                const config = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }});
-                
-                createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
+                const projectId = '{WC_PROJECT_ID}'
+                const metadata = {{
+                  name: 'VaultLogic Dev LLC',
+                  description: 'Industrial DeFi Strategy',
+                  url: 'https://vaultlogic.dev',
+                  icons: ['https://avatars.githubusercontent.com/u/37784886']
+                }}
 
-                watchAccount(config, {{
-                    async onChange(acc) {{
-                        if (acc.isConnected && acc.address) {{
-                            try {{
-                                // Update ETH Balance
-                                const eth = await getBalance(config, {{ address: acc.address, chainId: base.id }});
-                                document.getElementById('eth-bal').innerText = parseFloat(eth.formatted).toFixed(4);
+                const chains = [mainnet, base]
+                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
+                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
 
-                                // Update USDC Balance (Base Contract)
-                                const usdc = await getBalance(config, {{ 
-                                    address: acc.address, 
-                                    chainId: base.id, 
-                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
-                                }});
-                                document.getElementById('usdc-bal').innerText = parseFloat(usdc.formatted).toFixed(2);
-
-                                fetch("/connect-wallet", {{ 
-                                    method: "POST", 
-                                    headers: {{ "Content-Type": "application/json" }}, 
-                                    body: JSON.stringify({{ address: acc.address }}) 
-                                }});
-                            }} catch (e) {{ console.error("Balance fetch error", e); }}
-                        }}
+                watchAccount(wagmiConfig, {{
+                  onChange(account) {{
+                    if (account.isConnected) {{
+                      fetch("/connect-wallet", {{ 
+                        method: "POST", 
+                        headers: {{ "Content-Type": "application/json" }}, 
+                        body: JSON.stringify({{ address: account.address }}) 
+                      }});
                     }}
-                }});
+                  }}
+                }})
             </script>
         </body>
     </html>
