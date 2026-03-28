@@ -1,16 +1,14 @@
 import asyncio
 import os
-import random
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 app = FastAPI()
-WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 
-# Shared state
+# System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.1.0 Online", "Secure Channel Established."]
+system_logs = ["VaultLogic Kernel v2.5.1 Online", "Status: Awaiting Wallet Connection..."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -18,28 +16,24 @@ class WalletConnect(BaseModel):
 def add_log(msg):
     global system_logs
     system_logs.append(msg)
-    if len(system_logs) > 20: system_logs.pop(0)
+    if len(system_logs) > 25: system_logs.pop(0)
 
 async def get_industrial_yields():
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "asset": "STEAK / GT USDCP", "type": "ORGANIC"},
-        {"protocol": "UNISWAP V3", "apy": 3.55, "asset": "USDC/ETH", "type": "ORGANIC"},
         {"protocol": "AAVE V3", "apy": 2.87, "asset": "USDC", "type": "ORGANIC"},
         {"protocol": "AERODROME", "apy": 12.41, "asset": "cbBTC/WETH", "type": "BOOSTED"},
-        {"protocol": "BEEFY", "apy": 8.15, "asset": "WETH/USDC LP", "type": "BOOSTED"}
+        {"protocol": "UNISWAP V3", "apy": 3.55, "asset": "USDC/ETH", "type": "CONCENTRATED"},
+        {"protocol": "BEEFY", "apy": 8.15, "asset": "WETH/USDC LP", "type": "AUTO-COMPOUND"}
     ]
 
 @app.post("/connect-wallet")
 async def connect(data: WalletConnect):
     try:
-        if "INJECTION" in data.address:
-            add_log(f"CAPITAL_INJECTION: USDC Order Routed to {data.address.split('_')[2]}")
-        else:
-            add_log(f"AUTH_SUCCESS: {data.address[:6]}...{data.address[-4:]}")
-            
         from engine import run_alm_engine
+        # Start the engine logic for the REAL wallet address provided by the user
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
-        return {"status": "ENGINE_ACTIVATED"}
+        return {"status": "success"}
     except Exception as e:
         add_log(f"KERNEL_ERR: {str(e)}")
         return {"status": "error"}
@@ -62,16 +56,13 @@ async def startup():
 async def home(request: Request):
     yield_cards = "".join([f"""
         <div style="background:#111; padding:20px; margin:10px; border-radius:8px; border-left:4px solid #00ffcc; text-align:left; position:relative;">
-            <div style="position:absolute; top:10px; right:10px; font-size:9px; color:#666; border:1px solid #333; padding:2px 5px; border-radius:3px;">
-                {y['type']}
-            </div>
-            <h3 style="margin:0; color:#00ffcc; font-size:12px; text-transform:uppercase; letter-spacing:1px;">{y['protocol']}</h3>
-            <p style="margin:5px 0; font-size:24px; font-weight:bold; font-family:monospace;">{y['apy']}% <span style="font-size:12px; color:#444;">APR</span></p>
+            <div style="float:right; font-size:9px; color:#666; border:1px solid #333; padding:2px 5px; border-radius:3px;">{y['type']}</div>
+            <h3 style="margin:0; color:#00ffcc; font-size:12px; text-transform:uppercase;">{y['protocol']}</h3>
+            <p style="margin:5px 0; font-size:24px; font-weight:bold;">{y['apy']}% <span style="font-size:12px; color:#444;">APR</span></p>
             <div style="margin-bottom:15px;">
                 <small style="color:#888;">{y['asset']}</small>
-                <small style="display:block; color:#444; font-size:10px;">CAPACITY: $10M+</small>
             </div>
-            <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn" style="width:100%; background:#00ffcc; color:#000; border:none; padding:8px; font-weight:bold; font-size:10px; cursor:pointer; border-radius:3px; letter-spacing:1px; transition:0.3s;">
+            <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn" style="width:100%; background:#00ffcc; color:#000; border:none; padding:10px; font-weight:bold; font-size:10px; cursor:pointer; border-radius:3px;">
                 DEPLOY USDC
             </button>
         </div>""" for y in vault_cache["yields"]])
@@ -81,55 +72,91 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Industrial ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <!-- Ethers.js for real wallet connection -->
+            <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
             <style>
-                body {{ background:#0a0a0a; color:white; font-family:sans-serif; text-align:center; padding:40px; margin:0; }}
-                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:0 auto; }}
-                .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
-                .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
+                body {{ background:#050505; color:white; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align:center; padding:20px; margin:0; }}
+                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); max-width:1200px; margin:0 auto; gap:10px; }}
+                .header-section {{ padding:40px 20px; border-bottom:1px solid #111; margin-bottom:30px; }}
+                .connect-btn {{ background:#00ffcc; color:#000; border:none; padding:15px 40px; font-weight:bold; cursor:pointer; border-radius: 4px; letter-spacing:1px; transition: 0.3s; font-size:14px; }}
+                .connect-btn:hover {{ background:#00cca3; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
                 #console {{ 
-                    max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
-                    padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
-                    height:250px; overflow-y:auto; border-radius:8px;
+                    max-width:1100px; margin:40px auto; background:#000; border:1px solid #222; 
+                    padding:20px; text-align:left; font-family:monospace; font-size:12px; color:#00ffcc; 
+                    height:300px; overflow-y:auto; border-radius:4px; box-shadow: inset 0 0 10px #111;
                 }}
-                .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
-                .status-bar {{ font-size:10px; color:#444; margin-bottom:20px; text-transform:uppercase; letter-spacing:2px; }}
+                .log-entry {{ border-bottom:1px solid #0a0a0a; padding:8px 0; opacity: 0.9; line-height:1.4; }}
+                .status-tag {{ font-size:10px; color:#444; margin-bottom:10px; text-transform:uppercase; letter-spacing:3px; }}
+                #walletDisplay {{ color: #00ffcc; font-size:12px; margin-top:15px; font-family:monospace; display:none; }}
             </style>
         </head>
         <body>
-            <div class="status-bar">Network: Base Mainnet | Latency: 42ms | Oracle: Verified</div>
-            <h1 style="letter-spacing:15px; margin-top:10px; margin-bottom: 5px;">VAULTLOGIC</h1>
-            <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE v2.1</p>
+            <div class="header-section">
+                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.1</div>
+                <h1 style="letter-spacing:15px; margin:10px 0; color:#fff;">VAULTLOGIC</h1>
+                <p style="color:#666; margin-bottom:30px; font-size:14px;">Institutional Liquidity Management for Long-Term Trusts</p>
+                
+                <button id="connectBtn" class="connect-btn" onclick="connectWallet()">CONNECT INSTITUTIONAL WALLET</button>
+                <div id="walletDisplay">CONNECTED: <span id="addrText"></span></div>
+            </div>
             
-            <button id="cta" class="btn" onclick="triggerEngine('0x_secure_session')">INITIALIZE ENGINE</button>
-            
-            <div class="container" style="margin-top:40px;">{yield_cards}</div>
+            <div class="container">{yield_cards}</div>
 
             <div id="console">
-                <div style="color:#333; margin-bottom:10px; text-transform:uppercase; font-size:10px; font-weight:bold;">Industrial ALM Execution Log</div>
+                <div style="color:#333; margin-bottom:15px; text-transform:uppercase; font-size:10px; font-weight:bold; border-bottom:1px solid #222; padding-bottom:5px;">
+                    Industrial ALM Execution Log (Live)
+                </div>
                 <div id="log-stream"></div>
             </div>
 
             <script>
-                async function deployFunds(btn, protocol) {{
-                    btn.innerText = "ORDER ROUTED";
-                    btn.style.background = "#333";
-                    btn.style.color = "#00ffcc";
-                    btn.disabled = true;
-                    await triggerEngine("0x_INJECTION_" + protocol.replace(/ /g, "_"));
+                let activeAddress = null;
+
+                async function connectWallet() {{
+                    if (window.ethereum) {{
+                        try {{
+                            const provider = new ethers.providers.Web3Provider(window.ethereum);
+                            const accounts = await provider.send("eth_requestAccounts", []);
+                            activeAddress = accounts[0];
+                            
+                            // Update UI
+                            document.getElementById('connectBtn').style.display = 'none';
+                            document.getElementById('walletDisplay').style.display = 'block';
+                            document.getElementById('addrText').innerText = activeAddress;
+                            
+                            // Initialize Engine with real address
+                            await fetch("/connect-wallet", {{
+                                method: "POST",
+                                headers: {{ "Content-Type": "application/json" }},
+                                body: JSON.stringify({{ address: activeAddress }})
+                            }});
+                        }} catch (err) {{
+                            console.error("Connection rejected", err);
+                        }}
+                    }} else {{
+                        alert("Please install a Web3 Wallet (Coinbase or MetaMask)");
+                    }}
                 }}
 
-                async function triggerEngine(addr) {{
-                    const cta = document.getElementById('cta');
-                    cta.innerText = "ENGINE ACTIVE";
-                    cta.disabled = true;
-                    cta.style.background = "#111";
-                    cta.style.color = "#00ffcc";
-
+                async function deployFunds(btn, protocol) {{
+                    if (!activeAddress) {{
+                        alert("Please Connect Your Wallet First to Initialize Engine.");
+                        return;
+                    }}
+                    const originalText = btn.innerText;
+                    btn.innerText = "ROUTING...";
+                    btn.disabled = true;
+                    
+                    // Signal the engine to pivot/inject into this specific protocol
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
-                        body: JSON.stringify({{ address: addr }})
+                        body: JSON.stringify({{ address: "0x_INJECTION_" + protocol.replace(/ /g, "_") }})
                     }});
+                    
+                    setTimeout(() => {{
+                        btn.innerText = "ACTIVE";
+                    }}, 2000);
                 }}
 
                 setInterval(async () => {{
