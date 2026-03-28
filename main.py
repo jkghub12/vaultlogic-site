@@ -13,6 +13,7 @@ app = FastAPI()
 DATABASE_URL = os.getenv("DATABASE_URL")
 WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420' 
 
+# The "Source of Truth"
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
@@ -23,20 +24,18 @@ vault_cache = {
     "is_connected": False
 }
 
-# --- EXTENDED MODEL TO CAPTURE BALANCES ---
 class WalletConnect(BaseModel):
     address: str
     eth_balance: str = "0.000 ETH"
-    usdc_balance: str = "0.00 USDC"
 
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Update cache so the next page refresh shows the data
-        vault_cache["is_connected"] = True
-        vault_cache["wallet_address"] = data.address
-        vault_cache["wallet_balance"] = data.eth_balance
-        vault_cache["usdc_balance"] = data.usdc_balance
+        vault_cache.update({
+            "is_connected": True,
+            "wallet_address": data.address,
+            "wallet_balance": data.eth_balance
+        })
         
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
@@ -46,108 +45,78 @@ async def save_wallet(data: WalletConnect):
             cur.close()
             conn.close()
 
-        from engine import run_alm_engine 
+        # Fire the ALM Engine in the background
         asyncio.create_task(run_alm_engine(data.address))
-        
-        return {"status": "success", "engine": "activated"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/strategy", response_class=HTMLResponse)
-async def get_strategy():
-    return f"""
-    <html>
-        <head><title>VaultLogic | Strategy</title><style>body{{background:#0a0a0a;color:#ccc;font-family:sans-serif;padding:60px 20px;}}.container{{max-width:850px;margin:0 auto;border-left:1px solid #222;padding-left:40px;}}h1{{color:#00ffcc;text-transform:uppercase;}}.highlight{{color:#00ffcc;font-weight:bold;}}.back{{color:#666;text-decoration:none;font-size:11px;text-transform:uppercase;}}</style></head>
-        <body><div class="container"><a href="/" class="back">← Return to Command Center</a><h1>The Deterministic Vision</h1><p>VaultLogic Dev LLC provides industrial-grade logic. We eliminate the <span class="highlight">"Legacy Tax"</span>.</p><h2>I. Validation Tier</h2><p>Current stress-testing at the <strong>$500 entry level</strong>.</p></div></body>
-    </html>
-    """
-
-@app.get("/audit", response_class=HTMLResponse)
-async def get_audit():
-    return """
-    <html>
-        <head><style>body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}.box{{max-width:600px;margin:0 auto;padding:40px;border:1px solid #222;background:#111;}}h1{{color:#00ffcc;}}</style></head>
-        <body><div class="box"><h1>2026 CLARITY ACT AUDIT</h1><p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></p><a href="/" style="color:#666;text-decoration:none;font-size:11px;text-transform:uppercase;">← Return to Command Center</a></div></body>
-    </html>
-    """
-
-async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                vault_cache["yields"] = await get_all_yields()
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except:
-                vault_cache["last_updated"] = "SYNC ERROR"
-            await asyncio.sleep(60)
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(background_sync())
-    print("[SYSTEM] PRE-FLIGHT CHECK ACTIVE", flush=True)
+        return {"status": "success"}
+    except Exception:
+        return {"status": "silent_fail"}
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    is_conn = vault_cache["is_connected"]
-    raw_addr = vault_cache["wallet_address"]
+    is_conn = vault_cache.get("is_connected", False)
+    raw_addr = vault_cache.get("wallet_address")
     
-    # Logic-based address slicing to avoid NoneType errors
+    # Safe rendering: no slicing if it's None
     display_addr = f"{raw_addr[:6]}...{raw_addr[-4:]}" if is_conn and raw_addr else "NOT CONNECTED"
     
-    # Visibility logic
-    status_display = "block" if is_conn else "none"
-    btn_display = "none" if is_conn else "block"
-
     yield_cards = "".join([f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
-            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
-        </div>""" for y in vault_cache["yields"]])
+        </div>""" for y in vault_cache.get("yields", [])])
 
     return f"""
     <html>
         <head>
             <title>VaultLogic Command Center</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body {{ background: #0a0a0a; color: white; font-family: 'Courier New', monospace; text-align: center; padding: 40px 20px; }}
-                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
-                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
-                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                
-                /* THE LIVE ACCOUNT BOX */
-                .balance-box {{ 
-                    display: {status_display}; 
-                    max-width: 450px; margin: 20px auto; padding: 20px; 
-                    background: #050505; border: 1px solid #222; border-radius: 8px; text-align: left;
-                }}
-                .row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #111; font-size: 13px; }}
+                body {{ background: #0a0a0a; color: white; font-family: monospace; text-align: center; padding: 40px; }}
+                .balance-box {{ display: {"block" if is_conn else "none"}; max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #222; background: #050505; text-align: left; }}
+                .row {{ display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #111; padding: 5px; }}
             </style>
         </head>
         <body>
-            <div class="mission-brief">
-                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                
-                <div style="display: {btn_display};"><w3m-button></w3m-button></div>
+            <h1 style="letter-spacing: 10px;">VAULTLOGIC</h1>
+            <p style="color: #00ffcc; font-size: 12px;">{vault_cache['last_updated']}</p>
+            
+            <div style="display: {"none" if is_conn else "block"};"><w3m-button></w3m-button></div>
 
-                <div class="balance-box">
-                    <div style="color: #00ffcc; font-size: 10px; margin-bottom: 10px; letter-spacing: 1px;">> LIVE ACCOUNT DATA</div>
-                    <div class="row"><span>ADDRESS</span><span style="color: #666;">{display_addr}</span></div>
-                    <div class="row"><span>BASE ETH</span><span>{vault_cache['wallet_balance']}</span></div>
-                    <div class="row"><span>BASE USDC</span><span>{vault_cache['usdc_balance']}</span></div>
-                </div>
-
-                <div class="nav-links" style="margin-top:20px;">
-                    <a href="/strategy">Strategy Brief</a>
-                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
-                </div>
+            <div class="balance-box">
+                <div class="row"><span>WALLET</span><span style="color:#666;">{display_addr}</span></div>
+                <div class="row"><span>BASE ETH</span><span>{vault_cache['wallet_balance']}</span></div>
+                <div class="row"><span>BASE USDC</span><span>{vault_cache['usdc_balance']}</span></div>
             </div>
 
-            <div class="container">{yield_cards}</div>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; margin-top: 30px;">{yield_cards}</div>
 
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
+
+                const projectId = '{WC_PROJECT_ID}'
+                const config = defaultWagmiConfig({{ chains: [mainnet, base], projectId, metadata: {{ name: 'VaultLogic' }} }})
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }})
+
+                watchAccount(config, {{
+                  async onChange(acc) {{
+                    if (acc.isConnected) {{
+                      let bal = "0.000 ETH";
+                      try {{
+                         const res = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                         bal = res.formatted.substring(0,6) + " ETH";
+                      }} catch(e) {{ console.log("Balance fetch delayed"); }}
+
+                      await fetch("/connect-wallet", {{ 
+                        method: "POST", 
+                        headers: {{ "Content-Type": "application/json" }}, 
+                        body: JSON.stringify({{ address: acc.address, eth_balance: bal }}) 
+                      }});
+                      window.location.reload();
+                    }}
+                  }}
+                }})
+            </script>
+        </body>
+    </html>
+    """
