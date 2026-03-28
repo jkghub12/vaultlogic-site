@@ -1,3 +1,33 @@
+import asyncio
+import os
+import httpx
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
+# Initialize the app BEFORE any routes
+app = FastAPI()
+
+# Configuration & Cache
+DATABASE_URL = os.getenv("DATABASE_URL")
+WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
+
+vault_cache = {
+    "yields": [],
+    "last_updated": "SYSTEM INITIALIZING...",
+    "gas_price": "FETCHING...",
+    "wallet_balance": "0.000 ETH",
+    "usdc_balance": "0.00 USDC",
+    "engine_status": "OFFLINE"
+}
+
+class WalletConnect(BaseModel):
+    address: str
+
+# NOW you can define your routes
+@app.post("/connect-wallet")
+async def save_wallet(data: WalletConnect):
+    # ... (rest of your code)
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
     yield_cards = ""
