@@ -76,7 +76,7 @@ async def background_sync():
             vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
             vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
         except Exception as e:
-            vault_cache["last_updated"] = f"SYNC ERROR"
+            vault_cache["last_updated"] = "SYNC ERROR"
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -102,26 +102,10 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; margin: 0; }}
                 .mission-brief {{ max-width: 800px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
-                
-                /* Layout Fixes */
-                .status-container {{ 
-                    display: flex; 
-                    flex-direction: column; 
-                    align-items: center; 
-                    gap: 20px; 
-                    margin: 30px 0; 
-                }}
-                .balance-table {{ 
-                    border-collapse: collapse; 
-                    width: 100%; 
-                    max-width: 400px; 
-                    font-family: monospace; 
-                    border: 1px solid #222; 
-                    background: #050505;
-                }}
+                .status-container {{ display: flex; flex-direction: column; align-items: center; gap: 20px; margin: 30px 0; }}
+                .balance-table {{ border-collapse: collapse; width: 100%; max-width: 400px; font-family: monospace; border: 1px solid #222; background: #050505; }}
                 .balance-table td {{ padding: 12px; border: 1px solid #222; text-align: left; }}
                 .label {{ color: #666; font-size: 11px; text-transform: uppercase; width: 30%; }}
-                
                 .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 1200px; margin: 0 auto; }}
                 w3m-button {{ display: inline-block; }}
@@ -130,4 +114,70 @@ async def get_vault(request: Request):
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-                <p
+                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+                <div class="status-container">
+                    <table class="balance-table">
+                        <tr><td class="label">STATUS</td><td id="stat-cell" style="color:#ff4444; font-weight:bold;">DISCONNECTED</td></tr>
+                        <tr><td class="label">WALLET</td><td id="addr-cell">---</td></tr>
+                        <tr><td class="label">ETH</td><td id="eth-cell">0.000</td></tr>
+                        <tr><td class="label">USDC</td><td id="usdc-cell">0.00</td></tr>
+                    </table>
+                    <w3m-button></w3m-button>
+                </div>
+                <div class="nav-links">
+                    <a href="/strategy">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                </div>
+            </div>
+            <div class="container">{yield_cards}</div>
+            <script type="module">
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
+
+                const projectId = '{WC_PROJECT_ID}';
+                const chains = [mainnet, base];
+                const config = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata: {{ name: 'VaultLogic Dev LLC', url: 'https://vaultlogic.dev' }} 
+                }});
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
+
+                watchAccount(config, {{
+                    async onChange(acc) {{
+                        const statCell = document.getElementById('stat-cell');
+                        const addrCell = document.getElementById('addr-cell');
+                        const ethCell = document.getElementById('eth-cell');
+                        const usdcCell = document.getElementById('usdc-cell');
+
+                        if (acc.isConnected && acc.address) {{
+                            statCell.innerText = "CONNECTED";
+                            statCell.style.color = "#00ffcc";
+                            addrCell.innerText = acc.address.substring(0,6) + "..." + acc.address.substring(38);
+                            try {{
+                                const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                                ethCell.innerText = ethB.formatted.substring(0, 6) + " ETH";
+                                const usdcB = await getBalance(config, {{ 
+                                    address: acc.address, 
+                                    chainId: base.id, 
+                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+                                }});
+                                usdcCell.innerText = usdcB.formatted.substring(0, 7) + " USDC";
+                            }} catch(e) {{}}
+                            fetch("/connect-wallet", {{ 
+                                method: "POST", 
+                                headers: {{ "Content-Type": "application/json" }}, 
+                                body: JSON.stringify({{ address: acc.address }}) 
+                            }});
+                        }} else {{
+                            statCell.innerText = "DISCONNECTED";
+                            statCell.style.color = "#ff4444";
+                            addrCell.innerText = "---";
+                        }}
+                    }}
+                }});
+            </script>
+        </body>
+    </html>
+    """
