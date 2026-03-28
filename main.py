@@ -212,63 +212,7 @@ async def get_vault(request: Request):
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
-<script type="module">
-    import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-    import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core' // Added reconnect
 
-    const projectId = '{WC_PROJECT_ID}'
-    const metadata = {{
-      name: 'VaultLogic Dev LLC',
-      description: 'Industrial DeFi Strategy',
-      url: 'https://vaultlogic.dev',
-      icons: ['https://avatars.githubusercontent.com/u/37784886']
-    }}
-
-    const chains = [base, mainnet]
-    const wagmiConfig = defaultWagmiConfig({{ 
-        chains, 
-        projectId, 
-        metadata,
-        defaultChain: base 
-    }})
-
-    // --- CRITICAL: ADD THIS LINE ---
-    // This forces Wagmi to check for an existing session on page load
-    reconnect(wagmiConfig)
-
-    const modal = createWeb3Modal({{ 
-        wagmiConfig, 
-        projectId, 
-        chains,
-        featuredWalletIds: [
-            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
-        ]
-    }})
-
-    watchAccount(wagmiConfig, {{
-      onChange(account) {{
-        if (account.isConnected && account.address) {{
-          const isInitialState = document.body.innerText.includes('0.000 ETH');
-          
-          if (isInitialState) {{
-            fetch('/connect-wallet', {{ 
-              method: 'POST', 
-              headers: {{ 'Content-Type': 'application/json' }}, 
-              body: JSON.stringify({{ address: account.address }}) 
-            }}).then(response => {{
-              if (response.ok) {{
-                setTimeout(() => {{ 
-                  window.location.reload(); 
-                }}, 2500);
-              }}
-            }});
-          }}
-        }}
-      }}
-    }})
-</script>
         </body>
     </html>
     """
