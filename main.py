@@ -65,6 +65,7 @@ async def home(request: Request):
                 body {{ background:#0a0a0a; color:white; font-family:sans-serif; text-align:center; padding:40px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
+                .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
@@ -77,9 +78,7 @@ async def home(request: Request):
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <div id="wallet-btn-container">
-                <button id="cta" class="btn">INITIALIZE ENGINE</button>
-            </div>
+            <button id="cta" class="btn">INITIALIZE ENGINE</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -89,21 +88,24 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Simplified, robust import for Ethers-based Web3Modal (fixes the normalizeChainId error)
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
+                // Fixed Import Strategy: Use the standalone Wagmi/Web3Modal bundle to avoid export conflicts
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@3.5.0?bundle'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains?bundle'
-                import {{ reconnect, watchAccount }} from 'https://esm.sh/@wagmi/core?bundle'
+                import {{ reconnect, watchAccount }} from 'https://esm.sh/@wagmi/core@2.6.5?bundle'
 
                 const projectId = '{WC_PROJECT_ID}';
-                const metadata = {{
-                    name: 'VaultLogic',
-                    description: 'Industrial ALM',
-                    url: window.location.origin,
-                    icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }};
-
                 const chains = [mainnet, base];
-                const config = defaultWagmiConfig({{ chains, projectId, metadata }});
+                const config = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata: {{
+                        name: 'VaultLogic',
+                        description: 'Industrial ALM',
+                        url: window.location.origin,
+                        icons: ['https://avatars.githubusercontent.com/u/37784886']
+                    }}
+                }});
+
                 const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
                 reconnect(config);
@@ -111,7 +113,6 @@ async def home(request: Request):
                 const btn = document.getElementById('cta');
                 btn.onclick = () => modal.open();
 
-                // Listen for account changes
                 watchAccount(config, {{
                     onChange(account) {{
                         if (account.isConnected && account.address) {{
