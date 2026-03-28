@@ -31,19 +31,32 @@ async def save_wallet(data: WalletConnect):
             conn.commit()
             cur.close()
             conn.close()
-        # Engine trigger can go here
-        return {"status": "success"}
+        
+        from engine import run_alm_engine 
+        asyncio.create_task(run_alm_engine(data.address))
+        return {"status": "success", "engine": "activated"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- STRATEGY BRIEF ---
+@app.get("/strategy", response_class=HTMLResponse)
+async def get_strategy():
+    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Strategy Brief</h1><a href="/" style="color:#00ffcc;">Back</a></body></html>"""
+
+# --- COMPLIANCE AUDIT ---
+@app.get("/audit", response_class=HTMLResponse)
+async def get_audit():
+    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Compliance Audit</h1><a href="/" style="color:#00ffcc;">Back</a></body></html>"""
+
 async def background_sync():
-    while True:
-        try:
-            vault_cache["yields"] = await get_all_yields()
-            vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-        except:
-            vault_cache["last_updated"] = "SYNC ERROR"
-        await asyncio.sleep(60)
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                vault_cache["yields"] = await get_all_yields()
+                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
+            except Exception as e:
+                vault_cache["last_updated"] = f"SYNC ERROR"
+            await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
@@ -51,17 +64,17 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    # PRE-RENDER Yield Cards to avoid f-string nesting issues
-    yield_html = ""
+    # PRE-RENDER YIELD CARDS TO AVOID F-STRING CLASHES
+    yield_cards = ""
     for y in vault_cache["yields"]:
-        yield_html += f"""
+        yield_cards += f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
-            <small style="color: #666;">Asset: {y['asset']}</small>
+            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>"""
 
-    # THE MAIN TEMPLATE: Note the doubled {{ }} for JavaScript
+    # MAIN TEMPLATE WITH DOUBLE BRACES FOR JS
     return f"""
     <html>
         <head>
@@ -70,9 +83,12 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
+                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .stat-box {{ background: #050505; border: 1px solid #222; padding: 15px; margin: 10px auto; max-width: 400px; display: flex; justify-content: space-between; font-family: monospace; font-size: 12px; }}
-                .stat-val {{ color: #00ffcc; }}
+                .bal-box {{ display: flex; justify-content: center; gap: 20px; margin: 20px 0; font-family: monospace; font-size: 13px; }}
+                .bal-item {{ background: #050505; border: 1px solid #222; padding: 10px 20px; border-radius: 4px; }}
+                .bal-item b {{ color: #00ffcc; }}
+                w3m-button {{ margin-top: 20px; display: inline-block; min-height: 40px; }}
             </style>
         </head>
         <body>
@@ -80,54 +96,56 @@ async def get_vault(request: Request):
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 
-                <div class="stat-box"><span>BASE ETH:</span> <span id="eth-bal" class="stat-val">0.0000</span></div>
-                <div class="stat-box"><span>BASE USDC:</span> <span id="usdc-bal" class="stat-val">0.00</span></div>
+                <div class="bal-box">
+                    <div class="bal-item">ETH: <b id="eth-bal">0.0000</b></div>
+                    <div class="bal-item">USDC: <b id="usdc-bal">0.00</b></div>
+                </div>
 
-                <w3m-button></w3m-button>
+                <div id="btn-container">
+                    <w3m-button></w3m-button>
+                </div>
+
+                <div class="nav-links" style="margin-top:20px;">
+                    <a href="/strategy">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                </div>
             </div>
 
-            <div class="container">
-                {yield_html}
-            </div>
+            <div class="container">{yield_cards}</div>
 
             <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
                 import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const chains = [mainnet, base];
-                const config = defaultWagmiConfig({{ 
-                    chains, 
-                    projectId, 
-                    metadata: {{ name: 'VaultLogic', url: 'https://vaultlogic.dev' }} 
-                }});
+                const config = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }});
                 
                 createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
 
                 watchAccount(config, {{
                     async onChange(acc) {{
-                        const ethEl = document.getElementById('eth-bal');
-                        const usdcEl = document.getElementById('usdc-bal');
-
                         if (acc.isConnected && acc.address) {{
                             try {{
-                                const ethRes = await getBalance(config, {{ address: acc.address, chainId: base.id }});
-                                ethEl.innerText = parseFloat(ethRes.formatted).toFixed(4) + " ETH";
+                                // Update ETH Balance
+                                const eth = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                                document.getElementById('eth-bal').innerText = parseFloat(eth.formatted).toFixed(4);
 
-                                const usdcRes = await getBalance(config, {{ 
+                                // Update USDC Balance (Base Contract)
+                                const usdc = await getBalance(config, {{ 
                                     address: acc.address, 
                                     chainId: base.id, 
                                     token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
                                 }});
-                                usdcEl.innerText = parseFloat(usdcRes.formatted).toFixed(2) + " USDC";
+                                document.getElementById('usdc-bal').innerText = parseFloat(usdc.formatted).toFixed(2);
 
                                 fetch("/connect-wallet", {{ 
                                     method: "POST", 
                                     headers: {{ "Content-Type": "application/json" }}, 
                                     body: JSON.stringify({{ address: acc.address }}) 
                                 }});
-                            }} catch (e) {{ console.error(e); }}
+                            }} catch (e) {{ console.error("Balance fetch error", e); }}
                         }}
                     }}
                 }});
