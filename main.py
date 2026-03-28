@@ -65,6 +65,7 @@ async def get_vault(request: Request):
     addr = vault_cache["wallet_address"]
     display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
     
+    # Hide table if no wallet is connected
     balance_table = ""
     if addr:
         balance_table = f"""
@@ -127,9 +128,12 @@ async def get_vault(request: Request):
                 
                 createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }});
 
+                let isSyncing = false;
+
                 watchAccount(config, {{
                     async onChange(acc) {{
-                        if (acc.isConnected) {{
+                        if (acc.isConnected && !isSyncing && !"{addr}") {{
+                            isSyncing = true;
                             const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
                             let usdcVal = "0.00 USDC";
                             try {{
@@ -141,7 +145,7 @@ async def get_vault(request: Request):
                                 usdcVal = usdcB.formatted.substring(0, 7) + " USDC";
                             }} catch(e) {{ }}
 
-                            await fetch("/connect-wallet", {{ 
+                            const res = await fetch("/connect-wallet", {{ 
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ 
@@ -150,6 +154,10 @@ async def get_vault(request: Request):
                                     usdc_balance: usdcVal
                                 }}) 
                             }});
+                            
+                            if (res.ok) {{
+                                window.location.reload();
+                            }}
                         }}
                     }}
                 }});
