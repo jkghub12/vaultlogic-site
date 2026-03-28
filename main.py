@@ -33,7 +33,7 @@ async def get_industrial_yields():
 async def connect(data: WalletConnect):
     try:
         if "INJECTION" in data.address:
-            add_log(f"CAPITAL_INJECTION: $2,000.00 Order Routed to {data.address.split('_')[2]}")
+            add_log(f"CAPITAL_INJECTION: USDC Order Routed to {data.address.split('_')[2]}")
         else:
             add_log(f"AUTH_SUCCESS: {data.address[:6]}...{data.address[-4:]}")
             
@@ -72,7 +72,7 @@ async def home(request: Request):
                 <small style="display:block; color:#444; font-size:10px;">CAPACITY: $10M+</small>
             </div>
             <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn" style="width:100%; background:#00ffcc; color:#000; border:none; padding:8px; font-weight:bold; font-size:10px; cursor:pointer; border-radius:3px; letter-spacing:1px; transition:0.3s;">
-                DEPLOY $2,000.00
+                DEPLOY USDC
             </button>
         </div>""" for y in vault_cache["yields"]])
 
@@ -111,7 +111,7 @@ async def home(request: Request):
 
             <script>
                 async function deployFunds(btn, protocol) {{
-                    btn.innerText = "ORDER SENT";
+                    btn.innerText = "ORDER ROUTED";
                     btn.style.background = "#333";
                     btn.style.color = "#00ffcc";
                     btn.disabled = true;
