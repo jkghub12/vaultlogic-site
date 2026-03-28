@@ -42,7 +42,8 @@ async def save_wallet(data: WalletConnect):
             cur.close()
             conn.close()
 
-        from engine import run_alm_engine 
+        # Cleaned trigger logic
+        from engine import run_alm_engine
         asyncio.create_task(run_alm_engine(data.address))
         return {"status": "success"}
     except Exception as e:
@@ -66,6 +67,7 @@ async def startup_event():
 async def get_vault(request: Request):
     addr = vault_cache["wallet_address"]
     display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
+    # Ensure sync_state is a string 'true' or 'false' for JS consumption
     sync_state = "true" if addr else "false"
     
     yield_cards = "".join([f"""
@@ -128,7 +130,7 @@ async def get_vault(request: Request):
                                         token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
                                     }});
                                     usdcVal = usdcB.formatted.substring(0, 7) + " USDC";
-                                }} catch(e) {{}}
+                                }} catch(e) {{ console.error("USDC fetch skipped"); }}
 
                                 const res = await fetch("/connect-wallet", {{ 
                                     method: "POST", 
@@ -141,6 +143,7 @@ async def get_vault(request: Request):
                                 }});
                                 if (res.ok) window.location.reload();
                             }} catch(err) {{
+                                console.error("Sync error:", err);
                                 hasSynced = false;
                             }}
                         }
