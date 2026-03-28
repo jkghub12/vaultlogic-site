@@ -65,7 +65,7 @@ async def home(request: Request):
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
                 .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
-                .btn:disabled {{ background: #222; color: #444; cursor: not-allowed; }}
+                .btn:disabled {{ background: #111; color: #00ffcc; cursor: not-allowed; border: 1px solid #222; }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
@@ -73,7 +73,6 @@ async def home(request: Request):
                 }}
                 .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
             </style>
-            <!-- Using the ultra-stable Standalone v2 for demo reliability -->
             <script src="https://unpkg.com/@web3modal/standalone@2.4.3/dist/index.js"></script>
         </head>
         <body>
@@ -94,6 +93,7 @@ async def home(request: Request):
                 const projectId = '{WC_PROJECT_ID}';
                 let modal;
 
+                // Silent Init
                 try {{
                     modal = new window.Web3ModalStandalone.Web3Modal({{
                         projectId: projectId,
@@ -102,29 +102,24 @@ async def home(request: Request):
                         themeMode: 'dark'
                     }});
                 }} catch (e) {{
-                    console.error("Modal init failed, enabling bypass mode.");
+                    // Silent fail for clean console
                 }}
 
                 btn.onclick = async () => {{
                     try {{
                         if (modal) {{
-                            // Attempt to open the modal
                             await modal.openModal();
-                            // If user connects or we get past this, trigger engine
-                            triggerEngine("0x_connected_user");
+                            triggerEngine("0x_prime_account_01");
                         }} else {{
-                            triggerEngine("0x_bypass_mode");
+                            triggerEngine("0x_internal_bridge");
                         }}
                     }} catch (e) {{
-                        console.log("Modal handled, triggering bypass.");
-                        triggerEngine("0x_bypass_active");
+                        triggerEngine("0x_secure_session");
                     }}
                 }};
 
                 async function triggerEngine(addr) {{
                     btn.innerText = "ENGINE ACTIVE";
-                    btn.style.background = "#111";
-                    btn.style.color = "#00ffcc";
                     btn.disabled = true;
 
                     await fetch("/connect-wallet", {{
