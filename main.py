@@ -28,16 +28,14 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # --- DATABASE LOGGING ---
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        if DATABASE_URL:
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
+            conn.commit()
+            cur.close()
+            conn.close()
 
-        # --- ENGINE TRIGGER ---
-        # We import here so main.py stays light until a wallet actually connects
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
         
@@ -45,7 +43,6 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -66,19 +63,14 @@ async def get_strategy():
             <div class="container">
                 <a href="/" class="back">← Return to Command Center</a>
                 <h1>The Deterministic Vision</h1>
-                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
+                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems.</p>
                 <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
-                <h2>II. Validation Tier</h2>
-                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
-                <h2>III. The Regulatory Shield</h2>
-                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
+                <p>Phase Alpha focuses on Active Liquidity Management.</p>
             </div>
         </body>
     </html>
     """
 
-# --- COMPLIANCE AUDIT (CENTERED FIX) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -88,42 +80,33 @@ async def get_audit():
             <style>
                 body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
                 h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
-                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
-                .status-line{margin:15px 0; font-size:16px; display:block;}
-                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
+                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111;}
             </style>
         </head>
         <body>
             <div class="box">
                 <h1>2026 CLARITY ACT AUDIT</h1>
-                <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
-                <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
-                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
-                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
+                <span style="color:#00ffcc;">✅ VERIFIED</span>
+                <br><br>
+                <a href="/" style="color:#666; text-decoration:none; font-size:11px; text-transform:uppercase;">← Return</a>
             </div>
         </body>
     </html>
     """
 
 async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                vault_cache["yields"] = await get_all_yields()
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
-            await asyncio.sleep(60)
+    while True:
+        try:
+            vault_cache["yields"] = await get_all_yields()
+            vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
+            vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
+        except Exception as e:
+            vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
-    # Keep your existing sync
     asyncio.create_task(background_sync())
-    
-    # ADD THIS: Run a test cycle for the system itself to confirm logs work
-    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
-    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
@@ -133,7 +116,6 @@ async def get_vault(request: Request):
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
-            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>"""
 
     return f"""
@@ -144,126 +126,85 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
-                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
-                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
-                .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
+                .balance-table {{ margin: 20px auto; border-collapse: collapse; min-width: 300px; font-family: monospace; border: 1px solid #222; }}
+                .balance-table td {{ padding: 10px; border: 1px solid #222; }}
                 w3m-button {{ margin-top: 20px; display: inline-block; }}
+                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
                 
-                <div id="btn-container">
-                    <w3m-button></w3m-button>
-                </div>
+                <table class="balance-table">
+                    <tr><td style="color:#666">STATUS</td><td id="stat-cell" style="color:#ff4444">DISCONNECTED</td></tr>
+                    <tr><td style="color:#666">WALLET</td><td id="addr-cell">---</td></tr>
+                    <tr><td style="color:#666">ETH</td><td id="eth-cell">0.000</td></tr>
+                    <tr><td style="color:#666">USDC</td><td id="usdc-cell">0.00</td></tr>
+                </table>
 
-                <div class="nav-links" style="margin-top:20px;">
-                    <a href="/strategy">Strategy Brief</a>
-                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                <w3m-button></w3m-button>
+                <div style="margin-top:20px;">
+                    <a href="/strategy" style="color:#888; text-decoration:none; font-size:11px; text-transform:uppercase; margin:0 15px;">Strategy Brief</a>
+                    <a href="/audit" style="color:#ff4444; text-decoration:none; font-size:11px; text-transform:uppercase; margin:0 15px;">Compliance Audit</a>
                 </div>
             </div>
-
             <div class="container">{yield_cards}</div>
 
-            <div class="simulator">
-                <h2 style="font-size: 14px; color: #00ffcc; text-transform: uppercase; letter-spacing: 3px;">Validation Tier Simulator ($500 Base)</h2>
-                <div style="display: flex; justify-content: space-around; padding: 20px;">
-                    <div style="text-align: left;">
-                        <p style="margin:0; font-size: 11px; color: #666;">PASSIVE HOLDING (2.8%)</p>
-                        <p style="margin:0; font-size: 20px;">$500.55 <small style="font-size: 10px; color: #ff4444;">(-$0.00 Fee)</small></p>
-                    </div>
-                    <div style="text-align: right;">
-                        <p style="margin:0; font-size: 11px; color: #00ffcc;">VAULTLOGIC ACTIVE (ALM)</p>
-                        <p style="margin:0; font-size: 20px;">$534.20 <small style="font-size: 10px; color: #00ffcc;">(+$34.20 Proj.)</small></p>
-                    </div>
-                </div>
-                <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
-            </div>
+            <script type="module">
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
-<script type="module">
-    // Using specific versions to prevent the 'undefined reading 0' error
-    import { createWeb3Modal, defaultWagmiConfig } from 'https://esm.sh/@web3modal/wagmi@4.1.1'
-    import { mainnet, base } from 'https://esm.sh/viem/chains'
-    import { watchAccount, getBalance } from 'https://esm.sh/@wagmi/core'
+                const projectId = '{WC_PROJECT_ID}';
+                const chains = [mainnet, base];
+                const metadata = {{
+                    name: 'VaultLogic',
+                    description: 'Industrial DeFi Strategy',
+                    url: 'https://vaultlogic.dev',
+                    icons: ['https://avatars.githubusercontent.com/u/37784886']
+                }};
 
-    const projectId = '{WC_PROJECT_ID}';
-    
-    // Explicitly defining chains to satisfy the internal 'reading 0' check
-    const chains = [mainnet, base];
-    
-    const metadata = {
-        name: 'VaultLogic',
-        description: 'Industrial DeFi Strategy',
-        url: 'https://vaultlogic.dev',
-        icons: ['https://avatars.githubusercontent.com/u/37784886']
-    };
+                const config = defaultWagmiConfig({{ chains, projectId, metadata }});
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains }});
 
-    const config = defaultWagmiConfig({ 
-        chains, 
-        projectId, 
-        metadata,
-        enableWalletConnect: true,
-        enableInjected: true,
-        enableEIP6963: true,
-        enableCoinbase: true
-    });
-    
-    createWeb3Modal({ 
-        wagmiConfig: config, 
-        projectId, 
-        chains,
-        themeMode: 'dark' 
-    });
+                watchAccount(config, {{
+                    async onChange(acc) {{
+                        const statCell = document.getElementById('stat-cell');
+                        const addrCell = document.getElementById('addr-cell');
+                        const ethCell = document.getElementById('eth-cell');
+                        const usdcCell = document.getElementById('usdc-cell');
 
-    watchAccount(config, {
-        async onChange(acc) {
-            const statCell = document.getElementById('stat-cell');
-            const addrCell = document.getElementById('addr-cell');
-            const ethCell = document.getElementById('eth-cell');
-            const usdcCell = document.getElementById('usdc-cell');
+                        if (acc.isConnected && acc.address) {{
+                            statCell.innerText = "CONNECTED";
+                            statCell.style.color = "#00ffcc";
+                            addrCell.innerText = acc.address.substring(0,6) + "..." + acc.address.substring(38);
 
-            if (acc.isConnected && acc.address) {
-                statCell.innerText = "CONNECTED";
-                statCell.style.color = "#00ffcc";
-                addrCell.innerText = acc.address.substring(0,6) + "..." + acc.address.substring(38);
+                            try {{
+                                const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                                ethCell.innerText = ethB.formatted.substring(0, 6) + " ETH";
 
-                try {
-                    // Get ETH Balance
-                    const ethB = await getBalance(config, { 
-                        address: acc.address, 
-                        chainId: base.id 
-                    });
-                    ethCell.innerText = ethB.formatted.substring(0, 6) + " ETH";
+                                const usdcB = await getBalance(config, {{ 
+                                    address: acc.address, 
+                                    chainId: base.id, 
+                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+                                }});
+                                usdcCell.innerText = usdcB.formatted.substring(0, 7) + " USDC";
+                            }} catch(e) {{ console.log("Balance sync pending..."); }}
 
-                    // Get USDC Balance (Base)
-                    const usdcB = await getBalance(config, { 
-                        address: acc.address, 
-                        chainId: base.id, 
-                        token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
-                    });
-                    usdcCell.innerText = usdcB.formatted.substring(0, 7) + " USDC";
-                } catch(e) {
-                    console.log("Balance fetch pending...");
-                }
-
-                // Sync with VaultLogic Backend
-                fetch("/connect-wallet", { 
-                    method: "POST", 
-                    headers: { "Content-Type": "application/json" }, 
-                    body: JSON.stringify({ address: acc.address }) 
-                });
-            } else {
-                statCell.innerText = "DISCONNECTED";
-                statCell.style.color = "#ff4444";
-                addrCell.innerText = "---";
-            }
-        }
-    });
-</script>
+                            fetch("/connect-wallet", {{ 
+                                method: "POST", 
+                                headers: {{ "Content-Type": "application/json" }}, 
+                                body: JSON.stringify({{ address: acc.address }}) 
+                            }});
+                        }} else {{
+                            statCell.innerText = "DISCONNECTED";
+                            statCell.style.color = "#ff4444";
+                        }}
+                    }}
+                }});
+            </script>
         </body>
     </html>
     """
