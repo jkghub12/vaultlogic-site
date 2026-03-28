@@ -28,8 +28,6 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # ... (Your existing Postgres logging code) ...
-
         # TRIGGER 1: The Brain (engine.py)
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
@@ -41,8 +39,6 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-
-# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -75,7 +71,6 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT (CENTERED FIX) ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -114,35 +109,23 @@ async def background_sync():
             await asyncio.sleep(60)
 
 async def fetch_wallet_balances(address: str):
-    """
-    Scouts the Base network for actual ETH and USDC holdings.
-    """
     try:
         async with httpx.AsyncClient() as client:
-            # We use a public Base RPC to query balances
-            # In a production "Yahoo" integration, Coinbase provides this via SDK
             rpc_url = "https://mainnet.base.org"
-            
-            # 1. Fetch ETH Balance
             payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[address, "latest"],"id":1}
             resp = await client.post(rpc_url, json=payload)
             hex_bal = resp.json()['result']
             eth_bal = int(hex_bal, 16) / 10**18
             
             vault_cache["wallet_balance"] = f"{eth_bal:.4f} ETH"
-            vault_cache["usdc_balance"] = "1.50 USDC" # Placeholder until we add Token Contract call
+            vault_cache["usdc_balance"] = "1.50 USDC"
             vault_cache["engine_status"] = "SCOUTING ACTIVE"
-            
     except Exception as e:
         print(f"BALANCE ERROR: {e}")
 
-
 @app.on_event("startup")
 async def startup_event():
-    # Keep your existing sync
     asyncio.create_task(background_sync())
-    
-    # ADD THIS: Run a test cycle for the system itself to confirm logs work
     print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
     asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
 
@@ -174,26 +157,26 @@ async def get_vault(request: Request):
         </head>
         <body>
             <div class="mission-brief">
-    <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-    <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-    
-    <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
-        <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
-        <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
-        <div style="color: #666;">> ASSET_USDC: <span style="color: #eee;">{vault_cache.get('usdc_balance', '0.00 USDC')}</span></div>
-    </div>
+                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+                
+                <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
+                    <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
+                    <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
+                    <div style="color: #666;">> ASSET_USDC: <span style="color: #eee;">{vault_cache.get('usdc_balance', '0.00 USDC')}</span></div>
+                </div>
 
-    <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-    
-    <div id="btn-container">
-        <w3m-button></w3m-button>
-    </div>
+                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
+                
+                <div id="btn-container">
+                    <w3m-button></w3m-button>
+                </div>
 
-    <div class="nav-links" style="margin-top:20px;">
-        <a href="/strategy">Strategy Brief</a>
-        <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
-    </div>
-</div>
+                <div class="nav-links" style="margin-top:20px;">
+                    <a href="/strategy">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                </div>
+            </div>
 
             <div class="container">{yield_cards}</div>
 
@@ -215,7 +198,7 @@ async def get_vault(request: Request):
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}'
                 const metadata = {{
@@ -225,18 +208,44 @@ async def get_vault(request: Request):
                   icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }}
 
-                const chains = [mainnet, base]
-                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
-                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
+                const chains = [base, mainnet]
+                const wagmiConfig = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata,
+                    defaultChain: base 
+                }})
+
+                // Keeps address visible after page reload
+                reconnect(wagmiConfig)
+
+                const modal = createWeb3Modal({{ 
+                    wagmiConfig, 
+                    projectId, 
+                    chains,
+                    featuredWalletIds: [
+                        'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
+                        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
+                    ]
+                }})
 
                 watchAccount(wagmiConfig, {{
                   onChange(account) {{
-                    if (account.isConnected) {{
-                      fetch("/connect-wallet", {{ 
-                        method: "POST", 
-                        headers: {{ "Content-Type": "application/json" }}, 
-                        body: JSON.stringify({{ address: account.address }}) 
-                      }});
+                    if (account.isConnected && account.address) {{
+                      // Circuit breaker: only refresh if UI shows 0.000 ETH
+                      const isInitialState = document.body.innerText.includes('0.000 ETH');
+                      
+                      if (isInitialState) {{
+                        fetch('/connect-wallet', {{ 
+                          method: 'POST', 
+                          headers: {{ 'Content-Type': 'application/json' }}, 
+                          body: JSON.stringify({{ address: account.address }}) 
+                        }}).then(response => {{
+                          if (response.ok) {{
+                            setTimeout(() => {{ window.location.reload(); }}, 2500);
+                          }}
+                        }});
+                      }}
                     }}
                   }}
                 }})
