@@ -84,6 +84,9 @@ async def home(request: Request):
                 }}
                 .log-entry {{ border-bottom:1px solid #111; padding:5px 0; }}
             </style>
+            <!-- STABLE CDN: Using the Web3Modal AppKit bundle directly -->
+            <script src="https://unpkg.com/@web3modal/wagmi@4.1.1/dist/index.umd.js"></script>
+            <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
         </head>
         <body>
             <h1 style="letter-spacing:15px; margin-bottom: 5px;">VAULTLOGIC</h1>
@@ -99,10 +102,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Using a direct, version-locked bundle to prevent dependency mismatches
+                // Direct import from esm.sh but with a bundled query to force resolution
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem@2.x/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.x'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -112,13 +115,18 @@ async def home(request: Request):
                     icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }};
 
-                const config = defaultWagmiConfig({{ chains: [mainnet, base], projectId, metadata }});
-                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base], themeMode: 'dark' }});
+                const chains = [mainnet, base];
+                const config = defaultWagmiConfig({{ chains, projectId, metadata }});
+                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
-                reconnect(config);
-
+                // Attach click listener immediately
                 const cta = document.getElementById('cta');
-                cta.addEventListener('click', () => modal.open());
+                cta.onclick = () => {{
+                   console.log("Opening Modal...");
+                   modal.open();
+                }};
+
+                reconnect(config);
 
                 // Poll logs every 2 seconds
                 setInterval(async () => {{
@@ -140,14 +148,9 @@ async def home(request: Request):
                             
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
-                                headers: {{ \"Content-Type\": \"application/json\" }}, 
+                                headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: acc.address }}) 
                             }});
-                        }} else {{
-                            cta.innerText = \"INITIALIZE ENGINE\";
-                            cta.style.background = \"#00ffcc\";
-                            cta.style.color = \"#000\";
-                            cta.style.border = \"none\";
                         }}
                     }}
                 }});
