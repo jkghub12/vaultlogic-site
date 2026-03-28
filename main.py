@@ -78,7 +78,7 @@ async def home(request: Request):
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <button id="cta" class="btn" disabled>CONNECTING TO KERNEL...</button>
+            <button id="cta" class="btn" disabled>BOOTING KERNEL...</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -88,10 +88,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Using the absolute latest stable bundle to avoid local file 404s
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
+                // Pinning stable versions of v3 to avoid the 'normalizeChainId' error in v4
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@3.5.1?bundle'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains?bundle'
-                import {{ reconnect, watchAccount, getAccount }} from 'https://esm.sh/@wagmi/core?bundle'
+                import {{ reconnect, watchAccount }} from 'https://esm.sh/@wagmi/core@2.6.5?bundle'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const chains = [mainnet, base];
@@ -110,7 +110,6 @@ async def home(request: Request):
                     const modal = createWeb3Modal({{ 
                         wagmiConfig: config, 
                         projectId, 
-                        enableAnalytics: false,
                         themeMode: 'dark' 
                     }});
 
@@ -118,9 +117,7 @@ async def home(request: Request):
                     btn.innerText = "INITIALIZE ENGINE";
                     btn.disabled = false;
 
-                    btn.onclick = async () => {{
-                        await modal.open();
-                    }};
+                    btn.onclick = () => modal.open();
 
                     reconnect(config);
 
@@ -141,7 +138,10 @@ async def home(request: Request):
                         }}
                     }});
                 }} catch (e) {{
-                    console.error("Kernel Bridge Failed", e);
+                    console.error("VaultLogic Kernel Bridge Failed", e);
+                    // Fallback to enable button even if modal logic has issues
+                    document.getElementById('cta').innerText = "ENGINE READY (MODAL ERR)";
+                    document.getElementById('cta').disabled = false;
                 }}
 
                 setInterval(async () => {{
