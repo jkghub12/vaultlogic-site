@@ -195,10 +195,10 @@ async def get_vault(request: Request):
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
-            <script type="module">
+<script type="module">
     import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
     import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount, reconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
+    import {{ watchAccount, reconnect, disconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
 
     const projectId = '{WC_PROJECT_ID}'
     const metadata = {{
@@ -208,57 +208,49 @@ async def get_vault(request: Request):
       icons: ['https://avatars.githubusercontent.com/u/37784886']
     }}
 
-    // 1. Prioritize Base Network
     const chains = [base, mainnet]
     const wagmiConfig = defaultWagmiConfig({{ 
         chains, 
         projectId, 
         metadata,
+        enableCoinbase: true, // Explicitly enable for SDK stability
         defaultChain: base 
     }})
 
-    // 2. Initialize Modal
     const modal = createWeb3Modal({{ 
         wagmiConfig, 
         projectId, 
         chains,
         featuredWalletIds: [
-            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081', // Coinbase
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'  // MetaMask
         ]
     }})
 
-    // 3. FORCE SYNC: This fixes the "Connect Wallet" button showing when already connected
-    async function syncButtonState() {{
-        await reconnect(wagmiConfig);
-        const account = getAccount(wagmiConfig);
-        
-        // If the library confirms we are connected but button is lagging, 
-        // this manual check forces the Web Component to re-render.
-        if (account.isConnected && account.address) {{
-            console.log("VaultLogic: Connection verified for", account.address);
+    // --- FIX FOR "CONNECTION DECLINED" ---
+    // If we detect a "stuck" state, we force a silent disconnect before trying again.
+    window.addEventListener('click', (e) => {{
+        if (e.target.tagName === 'W3M-BUTTON') {{
+            const account = getAccount(wagmiConfig);
+            if (account.status === 'reconnecting' || account.status === 'connecting') {{
+                console.log("VaultLogic: Clearing ghost connection...");
+                disconnect(wagmiConfig);
+            }}
         }}
-    }}
-    syncButtonState();
+    }}, true);
 
-    // 4. Handle Account Changes
+    reconnect(wagmiConfig);
+
     watchAccount(wagmiConfig, {{
       onChange(account) {{
         if (account.isConnected && account.address) {{
-          // Only trigger refresh if the dashboard is still at 0.000 ETH
           const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
-          
           if (currentEth === "0.000 ETH") {{
             fetch('/connect-wallet', {{ 
               method: 'POST', 
               headers: {{ 'Content-Type': 'application/json' }}, 
               body: JSON.stringify({{ address: account.address }}) 
-            }}).then(response => {{
-              if (response.ok) {{
-                // Wait for the backend to finish the Scout cycle
-                setTimeout(() => {{ window.location.reload(); }}, 2000);
-              }}
-            }});
+            }}).then(res => {{ if(res.ok) setTimeout(() => window.location.reload(), 1500); }});
           }}
         }}
       }}
