@@ -30,11 +30,9 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Update local state for immediate UI reflect
         vault_cache["is_connected"] = True
         vault_cache["wallet_address"] = data.address
         
-        # Database Logging (Safe check for URL)
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
             cur = conn.cursor()
@@ -43,8 +41,9 @@ async def save_wallet(data: WalletConnect):
             cur.close()
             conn.close()
 
-        # Engine Trigger
+        from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
+        
         return {"status": "success", "engine": "activated"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -59,16 +58,23 @@ async def terminate_session():
     })
     return {"status": "success"}
 
-# --- STRATEGY & AUDIT ENDPOINTS REMAIN UNCHANGED ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
-    # (Strategy code from your snippet here)
-    pass
+    return f"""
+    <html>
+        <head><title>VaultLogic | Strategy</title><style>body{{background:#0a0a0a;color:#ccc;font-family:sans-serif;padding:60px 20px;}}.container{{max-width:850px;margin:0 auto;border-left:1px solid #222;padding-left:40px;}}h1{{color:#00ffcc;text-transform:uppercase;}}.highlight{{color:#00ffcc;font-weight:bold;}}.back{{color:#666;text-decoration:none;font-size:11px;text-transform:uppercase;}}</style></head>
+        <body><div class="container"><a href="/" class="back">← Return to Command Center</a><h1>The Deterministic Vision</h1><p>VaultLogic Dev LLC provides industrial-grade logic. We eliminate the <span class="highlight">"Legacy Tax"</span>.</p><h2>I. Validation Tier</h2><p>Current stress-testing at the <strong>$500 entry level</strong>.</p></div></body>
+    </html>
+    """
 
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
-    # (Audit code from your snippet here)
-    pass
+    return """
+    <html>
+        <head><style>body{{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}}.box{{max-width:600px;margin:0 auto;padding:40px;border:1px solid #222;background:#111;}}h1{{color:#00ffcc;}}</style></head>
+        <body><div class="box"><h1>2026 CLARITY ACT AUDIT</h1><p>Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></p><a href="/" style="color:#666;text-decoration:none;font-size:11px;text-transform:uppercase;">← Return to Command Center</a></div></body>
+    </html>
+    """
 
 async def background_sync():
     async with httpx.AsyncClient() as client:
@@ -84,9 +90,19 @@ async def background_sync():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_sync())
+    print("[SYSTEM] PRE-FLIGHT CHECK ACTIVE", flush=True)
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
+    is_conn = vault_cache.get("is_connected", False)
+    raw_addr = vault_cache.get("wallet_address")
+    
+    # Safe formatting to prevent NoneType slicing crash
+    display_addr = f"{raw_addr[:6]}...{raw_addr[-4:]}" if (is_conn and raw_addr) else "NOT CONNECTED"
+    
+    status_display = "block" if is_conn else "none"
+    button_display = "none" if is_conn else "block"
+
     yield_cards = "".join([f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
@@ -94,84 +110,5 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>""" for y in vault_cache["yields"]])
 
-    # Conditional Rendering Logic
-    is_conn = vault_cache["is_connected"]
-    balance_table_style = "display: block;" if is_conn else "display: none;"
-    button_display = "none" if is_conn else "block"
-
     return f"""
     <html>
-        <head>
-            <title>VaultLogic Command Center</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ background: #0a0a0a; color: white; font-family: 'Courier New', monospace; text-align: center; padding: 40px 20px; }}
-                .mission-brief {{ max-width: 750px; margin: 0 auto 30px auto; border-bottom: 1px solid #222; padding-bottom: 20px; }}
-                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
-                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                
-                /* Balance Table Styling */
-                .balance-container {{ 
-                    {balance_table_style}
-                    max-width: 600px; margin: 20px auto; 
-                    background: #000; border: 1px solid #222; padding: 20px; text-align: left;
-                }}
-                .balance-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #111; font-size: 14px; }}
-                .disconnect-btn {{ color: #ff4444; cursor: pointer; font-size: 10px; text-transform: uppercase; margin-top: 15px; display: inline-block; }}
-            </style>
-        </head>
-        <body>
-            <div class="mission-brief">
-                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <div style="font-size: 10px; color: #444;">FEE: {vault_cache['gas_price']}</div>
-                
-                <div style="display: {button_display};"><w3m-button></w3m-button></div>
-
-                <div class="balance-container">
-                    <div style="color: #00ffcc; font-size: 10px; margin-bottom: 15px;">> LIVE ACCOUNT DATA</div>
-                    <div class="balance-row"><span>WALLET</span><span style="color: #666;">{vault_cache['wallet_address'][:6]}...{vault_cache['wallet_address'][-4:] if is_conn else ''}</span></div>
-                    <div class="balance-row"><span>BASE ETH</span><span>{vault_cache['wallet_balance']}</span></div>
-                    <div class="balance-row"><span>BASE USDC</span><span>{vault_cache['usdc_balance']}</span></div>
-                    <div class="disconnect-btn" onclick="window.hardReset()">[ Terminate & Disconnect ]</div>
-                </div>
-
-                <div class="nav-links" style="margin-top:20px;">
-                    <a href="/strategy">Strategy Brief</a>
-                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
-                </div>
-            </div>
-
-            <div class="container">{yield_cards}</div>
-
-            <script type="module">
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, disconnect }} from 'https://esm.sh/@wagmi/core'
-
-                const projectId = '{WC_PROJECT_ID}'
-                const chains = [mainnet, base]
-                const config = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }})
-                createWeb3Modal({{ wagmiConfig: config, projectId, chains }})
-
-                window.hardReset = async () => {{
-                    await disconnect(config);
-                    await fetch("/terminate-session", {{ method: "POST" }});
-                    window.location.reload();
-                }}
-
-                watchAccount(config, {{
-                  onChange(acc) {{
-                    if (acc.isConnected) {{
-                      fetch("/connect-wallet", {{ 
-                        method: "POST", 
-                        headers: {{ "Content-Type": "application/json" }}, 
-                        body: JSON.stringify({{ address: acc.address }}) 
-                      }}).then(() => setTimeout(() => window.location.reload(), 800));
-                    }}
-                  }}
-                }})
-            </script>
-        </body>
-    </html>
-    """
