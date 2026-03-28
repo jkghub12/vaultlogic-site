@@ -13,6 +13,7 @@ app = FastAPI()
 DATABASE_URL = os.getenv("DATABASE_URL")
 WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420' 
 
+# The source of truth for the UI
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
@@ -30,12 +31,11 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Update local cache for the UI
+        # Silently update the cache so the NEXT page load sees the data
         vault_cache["wallet_address"] = data.address
         vault_cache["wallet_balance"] = data.eth_balance
         vault_cache["usdc_balance"] = data.usdc_balance
         
-        # --- DATABASE LOGGING ---
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
             cur = conn.cursor()
@@ -44,46 +44,13 @@ async def save_wallet(data: WalletConnect):
             cur.close()
             conn.close()
 
-        # --- ENGINE TRIGGER ---
+        # Trigger the engine scout
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
         
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-@app.get("/strategy", response_class=HTMLResponse)
-async def get_strategy():
-    return f"""
-    <html>
-        <head>
-            <title>VaultLogic | Strategy</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ background: #0a0a0a; color: #ccc; font-family: 'Segoe UI', sans-serif; line-height: 1.8; padding: 60px 20px; }}
-                .container {{ max-width: 850px; margin: 0 auto; border-left: 1px solid #222; padding-left: 40px; }}
-                h1 {{ color: #00ffcc; letter-spacing: 4px; text-transform: uppercase; }}
-                .back {{ color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <a href="/" class="back">← Return to Command Center</a>
-                <h1>The Deterministic Vision</h1>
-                <p>Industrial-grade logic for complex systems.</p>
-            </div>
-        </body>
-    </html>
-    """
-
-@app.get("/audit", response_class=HTMLResponse)
-async def get_audit():
-    return """
-    <html>
-        <head><style>body{background:#0a0a0a;color:#eee;text-align:center;padding:50px;}</style></head>
-        <body><h1>2026 CLARITY ACT AUDIT</h1><a href="/" style="color:#666;">Return</a></body>
-    </html>
-    """
 
 async def background_sync():
     async with httpx.AsyncClient() as client:
@@ -92,8 +59,8 @@ async def background_sync():
                 vault_cache["yields"] = await get_all_yields()
                 vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
                 vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
+            except:
+                vault_cache["last_updated"] = "SYNC ERROR"
             await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -102,17 +69,17 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    yield_cards = ""
-    for y in vault_cache["yields"]:
-        yield_cards += f"""
+    # Dynamic Address Formatting
+    addr = vault_cache["wallet_address"]
+    display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
+    
+    # Build the Yield Cards
+    yield_cards = "".join([f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
             <small style="color: #666;">Asset: {y['asset']}</small>
-        </div>"""
-
-    addr = vault_cache["wallet_address"]
-    display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
+        </div>""" for y in vault_cache["yields"]])
 
     return f"""
     <html>
@@ -122,23 +89,28 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
+                .status-line {{ color: #00ffcc; font-family: monospace; font-size: 12px; margin: 20px 0; letter-spacing: 1px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .balance-info {{ color: #00ffcc; font-family: monospace; font-size: 12px; margin: 15px 0; }}
+                w3m-button {{ margin-top: 20px; display: inline-block; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
-                <h1 style="letter-spacing: 12px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px;">{vault_cache['last_updated']}</p>
-                <div class="balance-info">
+                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+                <p style="color: #666; font-size: 10px;">{vault_cache['last_updated']}</p>
+                
+                <div class="status-line">
                     ADDR: {display_addr} | ETH: {vault_cache['wallet_balance']} | USDC: {vault_cache['usdc_balance']}
                 </div>
+
                 <w3m-button></w3m-button>
-                <div style="margin-top:20px;">
-                    <a href="/strategy" style="color:#888; text-decoration:none; margin:0 15px;">Strategy Brief</a>
-                    <a href="/audit" style="color:#ff4444; text-decoration:none; margin:0 15px;">Compliance Audit</a>
+
+                <div style="margin-top:25px;">
+                    <a href="/strategy" style="color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px;">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px;">Compliance Audit</a>
                 </div>
             </div>
+
             <div class="container">{yield_cards}</div>
 
             <script type="module">
@@ -147,16 +119,16 @@ async def get_vault(request: Request):
                 import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}'
-                const chains = [mainnet, base]
-                const config = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }})
-                createWeb3Modal({{ wagmiConfig: config, projectId, chains }})
+                const config = defaultWagmiConfig({{ chains: [mainnet, base], projectId, metadata: {{ name: 'VaultLogic' }} }})
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }})
+
+                let hasSynced = { "true" if addr else "false" };
 
                 watchAccount(config, {{
                   async onChange(acc) {{
-                    if (acc.isConnected) {{
+                    if (acc.isConnected && !hasSynced) {{
                       const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
                       
-                      // Scout for USDC on Base
                       let usdcVal = "0.00 USDC";
                       try {{
                         const usdcB = await getBalance(config, {{ 
@@ -165,9 +137,9 @@ async def get_vault(request: Request):
                             token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
                         }});
                         usdcVal = usdcB.formatted.substring(0, 7) + " USDC";
-                      }} catch(e) {{}}
+                      }} catch(e) {{ console.log("USDC Scout Failed"); }}
 
-                      await fetch("/connect-wallet", {{ 
+                      const response = await fetch("/connect-wallet", {{ 
                         method: "POST", 
                         headers: {{ "Content-Type": "application/json" }}, 
                         body: JSON.stringify({{ 
@@ -176,9 +148,13 @@ async def get_vault(request: Request):
                             usdc_balance: usdcVal
                         }}) 
                       }});
-                      window.location.reload();
-                    }}
-                  }}
+
+                      if (response.ok) {{
+                        hasSynced = true;
+                        window.location.reload();
+                      }}
+                    }
+                  }
                 }})
             </script>
         </body>
