@@ -225,6 +225,7 @@ async def get_vault(request: Request):
       icons: ['https://avatars.githubusercontent.com/u/37784886']
     }}
 
+    // 1. BASE IS FIRST + DEFAULT CHAIN (Solves your Network list issue)
     const chains = [base, mainnet]
     const wagmiConfig = defaultWagmiConfig({{ 
         chains, 
@@ -238,29 +239,29 @@ async def get_vault(request: Request):
         projectId, 
         chains,
         featuredWalletIds: [
-            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081', // Coinbase
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'  // MetaMask
         ]
     }})
 
+    // 2. STABLE RELOAD LOGIC
     watchAccount(wagmiConfig, {{
       onChange(account) {{
         if (account.isConnected && account.address) {{
-          const isInitialState = document.body.innerText.includes('0.000 ETH');
-          
-          if (isInitialState) {{
-            fetch('/connect-wallet', {{ 
-              method: 'POST', 
-              headers: {{ 'Content-Type': 'application/json' }}, 
-              body: JSON.stringify({{ address: account.address }}) 
-            }}).then(response => {{
-              if (response.ok) {{
-                setTimeout(() => {{ 
-                  window.location.reload(); 
-                }}, 2500);
-              }
-            }});
-          }}
+          fetch("/connect-wallet", {{ 
+            method: "POST", 
+            headers: {{ "Content-Type": "application/json" }}, 
+            body: JSON.stringify({{ address: account.address }}) 
+          }}).then(response => {{
+            if (response.ok) {{
+                // We only reload if the current balance shown is 0.
+                // This prevents the "infinite disconnect" loop.
+                const currentEth = document.body.innerText.includes("0.000 ETH");
+                if (currentEth) {{
+                    setTimeout(() => {{ window.location.reload(); }}, 1000);
+                }}
+            }}
+          }});
         }}
       }}
     }})
