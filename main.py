@@ -1,134 +1,3 @@
-import asyncio
-import os
-import psycopg2
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from yieldscout import get_all_yields
-from engine import run_alm_engine
-
-app = FastAPI()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420' 
-
-vault_cache = {
-    "yields": [],
-    "last_updated": "SYSTEM INITIALIZING...",
-    "gas_price": "FETCHING...",
-    "wallet_balance": "0.000 ETH",
-    "usdc_balance": "0.00 USDC",
-    "engine_status": "OFFLINE"
-}
-
-class WalletConnect(BaseModel):
-    address: str
-
-@app.post("/connect-wallet")
-async def save_wallet(data: WalletConnect):
-    try:
-        # TRIGGER 1: The Brain (engine.py)
-        from engine import run_alm_engine 
-        asyncio.create_task(run_alm_engine(data.address))
-        
-        # TRIGGER 2: The Balance Scout
-        asyncio.create_task(fetch_wallet_balances(data.address))
-        
-        return {"status": "success"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/strategy", response_class=HTMLResponse)
-async def get_strategy():
-    return f"""
-    <html>
-        <head>
-            <title>VaultLogic | Strategy</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ background: #0a0a0a; color: #ccc; font-family: 'Segoe UI', sans-serif; line-height: 1.8; padding: 60px 20px; }}
-                .container {{ max-width: 850px; margin: 0 auto; border-left: 1px solid #222; padding-left: 40px; }}
-                h1 {{ color: #00ffcc; letter-spacing: 4px; text-transform: uppercase; }}
-                h2 {{ color: #eee; margin-top: 40px; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px; }}
-                .highlight {{ color: #00ffcc; font-weight: bold; }}
-                .back {{ color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 20px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <a href="/" class="back">← Return to Command Center</a>
-                <h1>The Deterministic Vision</h1>
-                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems. We eliminate the <span class="highlight">"Legacy Tax"</span> of manual error and regulatory friction.</p>
-                <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha focuses on Active Liquidity Management. We prioritize safety and <span class="highlight">deterministic outcomes</span> over black-box predictions.</p>
-                <h2>II. Validation Tier</h2>
-                <p>Current stress-testing performed at the <strong>$500 entry level</strong> to verify rebalancing logic and gas-optimization ratios before institutional scaling.</p>
-                <h2>III. The Regulatory Shield</h2>
-                <p>In a landscape of shifting laws (Clarity Act 2026), VaultLogic provides the auditable trail required for institutional and HNW participation.</p>
-            </div>
-        </body>
-    </html>
-    """
-
-@app.get("/audit", response_class=HTMLResponse)
-async def get_audit():
-    return """
-    <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
-                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
-                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
-                .status-line{margin:15px 0; font-size:16px; display:block;}
-                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
-            </style>
-        </head>
-        <body>
-            <div class="box">
-                <h1>2026 CLARITY ACT AUDIT</h1>
-                <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
-                <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
-                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required for Automated Defense Report.')">GENERATE DEFENSE REPORT</a><br>
-                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
-            </div>
-        </body>
-    </html>
-    """
-
-async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                vault_cache["yields"] = await get_all_yields()
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
-            await asyncio.sleep(60)
-
-async def fetch_wallet_balances(address: str):
-    try:
-        async with httpx.AsyncClient() as client:
-            rpc_url = "https://mainnet.base.org"
-            payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[address, "latest"],"id":1}
-            resp = await client.post(rpc_url, json=payload)
-            hex_bal = resp.json()['result']
-            eth_bal = int(hex_bal, 16) / 10**18
-            
-            vault_cache["wallet_balance"] = f"{eth_bal:.4f} ETH"
-            vault_cache["usdc_balance"] = "1.50 USDC"
-            vault_cache["engine_status"] = "SCOUTING ACTIVE"
-    except Exception as e:
-        print(f"BALANCE ERROR: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(background_sync())
-    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
-    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
-
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
     yield_cards = ""
@@ -195,74 +64,67 @@ async def get_vault(request: Request):
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
-<script type="module">
-    import { createAppKit } from 'https://esm.sh/@reown/appkit'
-    import { mainnet, base } from 'https://esm.sh/@reown/appkit/networks'
-    import { WagmiAdapter } from 'https://esm.sh/@reown/appkit-adapter-wagmi'
-    import { watchAccount, reconnect, disconnect, getAccount, signMessage } from 'https://esm.sh/@wagmi/core'
+            <script type="module">
+                import {{ createAppKit }} from 'https://esm.sh/@reown/appkit'
+                import {{ mainnet, base }} from 'https://esm.sh/@reown/appkit/networks'
+                import {{ WagmiAdapter }} from 'https://esm.sh/@reown/appkit-adapter-wagmi'
+                import {{ watchAccount, reconnect, disconnect, getAccount, signMessage }} from 'https://esm.sh/@wagmi/core'
 
-    const projectId = '{WC_PROJECT_ID}'
-    const networks = [base, mainnet]
+                const projectId = '{WC_PROJECT_ID}'
+                const networks = [base, mainnet]
 
-    // 1. The Adapter: This is the "Engine" YieldSeeker uses
-    const wagmiAdapter = new WagmiAdapter({
-        projectId,
-        networks
-    })
+                const wagmiAdapter = new WagmiAdapter({{
+                    projectId,
+                    networks
+                }})
 
-    // 2. The AppKit: This is the actual Interface
-    const modal = createAppKit({
-        adapters: [wagmiAdapter],
-        networks,
-        projectId,
-        features: { analytics: false, email: false, socials: false },
-        themeMode: 'dark'
-    })
+                const modal = createAppKit({{
+                    adapters: [wagmiAdapter],
+                    networks,
+                    projectId,
+                    features: {{ analytics: false, email: false, socials: false }},
+                    themeMode: 'dark'
+                }})
 
-    // --- ZERO-DEFECT RECOVERY ---
-    async function forceSync() {
-        try {
-            const state = getAccount(wagmiAdapter.wagmiConfig);
-            // If we are stuck in "Connecting", we force a reset
-            if (state.status === 'connecting') {
-                await disconnect(wagmiAdapter.wagmiConfig);
-            }
-            await reconnect(wagmiAdapter.wagmiConfig);
-        } catch (e) { console.warn("Reset handled."); }
-    }
-    forceSync();
+                async function forceSync() {{
+                    try {{
+                        const state = getAccount(wagmiAdapter.wagmiConfig);
+                        if (state.status === 'connecting') {{
+                            await disconnect(wagmiAdapter.wagmiConfig);
+                        }}
+                        await reconnect(wagmiAdapter.wagmiConfig);
+                    }} catch (e) {{ console.warn("Reset handled."); }}
+                }}
+                forceSync();
 
-    // --- THE "SIGN-IN" PROTOCOL ---
-    async function secureSignIn(address) {
-        const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
-        if (currentEth !== "0.000 ETH") return;
+                async function secureSignIn(address) {{
+                    const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
+                    if (currentEth !== "0.000 ETH") return;
 
-        try {
-            // This is the "Sign In" pop-up you saw on YieldSeeker
-            await signMessage(wagmiAdapter.wagmiConfig, {
-                message: `VaultLogic Auth\\nAddress: ${address}\\nTS: ${Date.now()}`
-            });
+                    try {{
+                        await signMessage(wagmiAdapter.wagmiConfig, {{
+                            message: `VaultLogic Auth\\nAddress: ${{address}}\\nTS: ${{Date.now()}}`
+                        }});
 
-            const res = await fetch('/connect-wallet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address })
-            });
-            if (res.ok) setTimeout(() => window.location.reload(), 1200);
-        } catch (err) {
-            // If they decline, we wipe the state so they can try again immediately
-            await disconnect(wagmiAdapter.wagmiConfig);
-        }
-    }
+                        const res = await fetch('/connect-wallet', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{ address }})
+                        }});
+                        if (res.ok) setTimeout(() => window.location.reload(), 1200);
+                    }} catch (err) {{
+                        await disconnect(wagmiAdapter.wagmiConfig);
+                    }}
+                }}
 
-    watchAccount(wagmiAdapter.wagmiConfig, {
-        onChange(account) {
-            if (account.isConnected && account.address) {
-                secureSignIn(account.address);
-            }
-        }
-    })
-</script>
+                watchAccount(wagmiAdapter.wagmiConfig, {{
+                    onChange(account) {{
+                        if (account.isConnected && account.address) {{
+                            secureSignIn(account.address);
+                        }}
+                    }}
+                }})
+            </script>
         </body>
     </html>
     """
