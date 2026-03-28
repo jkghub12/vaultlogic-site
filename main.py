@@ -29,6 +29,7 @@ class WalletConnect(BaseModel):
 
 # 3. Helper Functions
 async def fetch_wallet_balances(address: str):
+    """Scouts the Base network for actual ETH holdings."""
     try:
         async with httpx.AsyncClient() as client:
             rpc_url = "https://mainnet.base.org"
@@ -98,42 +99,96 @@ async def get_vault(request: Request):
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
                 #btn-container {{ margin-top: 20px; {is_connected_css} }}
-                .term-btn {{ color:#ff4444; font-size:9px; text-transform:uppercase; text-decoration:none; letter-spacing:1px; margin-top:10px; display:{"block" if vault_cache["is_connected"] else "none"}; cursor:pointer; background:none; border:none; width:100%; }}
+                .term-btn {{ color:#ff4444; font-size:9px; text-transform:uppercase; text-decoration:none; letter-spacing:1px; margin-top:20px; display:{"block" if vault_cache["is_connected"] else "none"}; cursor:pointer; background:none; border:none; width:100%; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+                
                 <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
                     <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
                     <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
                 </div>
+
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-                <div id="btn-container"><w3m-button></w3m-button></div>
+                
+                <div id="btn-container">
+                    <w3m-button></w3m-button>
+                </div>
+                
                 <button class="term-btn" onclick="window.hardDisconnect()">[ TERMINATE SESSION ]</button>
             </div>
+
             <div class="container">{yield_cards}</div>
 
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, disconnect }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount, disconnect, reconnect }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}'
                 const chains = [mainnet, base]
-                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }})
-                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains, themeMode: 'dark' }})
+                
+                // metadata with specific naming for VaultLogic Dev LLC
+                const metadata = {{ 
+                    name: 'VaultLogic Dev LLC', 
+                    description: 'Industrial DeFi Strategy',
+                    url: 'https://vaultlogic.dev',
+                    icons: ['https://avatars.githubusercontent.com/u/37784886']
+                }}
 
+                const wagmiConfig = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata,
+                    enableInjected: true,
+                    enableWalletConnect: true
+                }})
+
+                // Fixing Black Font with themeVariables
+                const modal = createWeb3Modal({{ 
+                    wagmiConfig, 
+                    projectId, 
+                    chains, 
+                    themeMode: 'dark',
+                    themeVariables: {{
+                        '--w3m-accent': '#00ffcc',
+                        '--w3m-color-mix': '#000000',
+                        '--w3m-color-mix-strength': 40
+                    }}
+                }})
+
+                // Force-Kill Stale Sessions
                 window.hardDisconnect = async () => {{
-                    console.log("VAULTLOGIC: FORCED TERMINATION INITIATED");
+                    console.log("VAULTLOGIC: TERMINATING...");
                     try {{
                         await disconnect(wagmiConfig);
-                        localStorage.clear(); // Wipe the cache
+                        localStorage.removeItem('wagmi.store');
+                        localStorage.removeItem('wagmi.connected');
+                        localStorage.removeItem('wagmi.account');
                         await fetch("/terminate-session", {{ method: "POST" }});
-                        window.location.href = "/"; // Force a full clean redirect
-                    }} catch (e) {{ console.error(e); window.location.reload(); }}
+                        window.location.href = "/";
+                    }} catch (e) {{
+                        localStorage.clear();
+                        window.location.reload();
+                    }}
                 }}
+
+                // Diagnostic: Auto-fix "Connecting..." hang
+                window.addEventListener('load', () => {{
+                    setTimeout(() => {{
+                        const btn = document.querySelector('w3m-button');
+                        if (btn && btn.shadowRoot) {{
+                            const btnText = btn.shadowRoot.textContent || "";
+                            if (btnText.includes('Connecting')) {{
+                                console.warn("VAULTLOGIC: Reconnection Hang Detected. Clearing state...");
+                                window.hardDisconnect();
+                            }}
+                        }}
+                    }}, 2500);
+                }});
 
                 watchAccount(wagmiConfig, {{
                   onChange(account) {{
@@ -142,7 +197,7 @@ async def get_vault(request: Request):
                         method: "POST", 
                         headers: {{ "Content-Type": "application/json" }}, 
                         body: JSON.stringify({{ address: account.address }}) 
-                      }}).then(r => {{ if(r.ok) setTimeout(() => window.location.reload(), 500); }});
+                      }}).then(r => {{ if(r.ok) setTimeout(() => window.location.reload(), 600); }});
                     }}
                   }}
                 }})
