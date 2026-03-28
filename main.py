@@ -99,10 +99,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Using stable un-pinned versions with a unified bundle request
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
+                // FINAL ARCHITECTURE: Single-entry bundle to eliminate "export not found" errors
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.2.0?bundle'
+                import * as ViemChains from 'https://esm.sh/viem/chains'
+                import * as WagmiCore from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -112,34 +112,25 @@ async def home(request: Request):
                     icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }};
 
-                const chains = [mainnet, base];
+                const chains = [ViemChains.mainnet, ViemChains.base];
                 const config = defaultWagmiConfig({{ chains, projectId, metadata }});
-                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
-                
-                // Expose modal to window so the button can always find it
+                const modal = createWeb3Modal({{ 
+                    wagmiConfig: config, 
+                    projectId, 
+                    enableAnalytics: false,
+                    themeMode: 'dark' 
+                }});
+
                 window.vaultModal = modal;
+                WagmiCore.reconnect(config);
 
-                reconnect(config);
-
-                // Polling for logs
-                setInterval(async () => {{
-                    try {{
-                        const res = await fetch('/logs');
-                        const data = await res.json();
-                        const stream = document.getElementById('log-stream');
-                        stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
-                    }} catch(e) {{}}
-                }}, 2000);
-
-                // Watch for account connection
-                watchAccount(config, {{
+                WagmiCore.watchAccount(config, {{
                     onChange(acc) {{
                         if (acc.isConnected && acc.address) {{
                             const btn = document.getElementById('cta');
                             btn.innerText = "ENGINE ACTIVE";
                             btn.style.background = "#111";
                             btn.style.color = "#00ffcc";
-                            btn.style.border = "1px solid #00ffcc";
                             
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
@@ -149,17 +140,26 @@ async def home(request: Request):
                         }}
                     }}
                 }});
+
+                setInterval(async () => {{
+                    try {{
+                        const res = await fetch('/logs');
+                        const data = await res.json();
+                        const stream = document.getElementById('log-stream');
+                        stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
+                    }} catch(e) {{}}
+                }}, 2000);
             </script>
 
             <script>
-                // Fallback click listener outside the module scope
-                document.getElementById('cta').addEventListener('click', function() {{
+                // Direct interaction layer
+                document.getElementById('cta').onclick = function() {{
                     if (window.vaultModal) {{
                         window.vaultModal.open();
                     }} else {{
-                        console.error("VaultLogic: Kernel still loading...");
+                        console.log("VaultLogic: Kernel initializing...");
                     }}
-                }});
+                }};
             </script>
         </body>
     </html>
