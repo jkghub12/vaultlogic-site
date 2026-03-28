@@ -99,10 +99,11 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // THIS IS THE FIX: Using the all-in-one bundled version to stop the normalizeChainId error
+                // INDUSTRIAL FIX: Use the 'bundle' query to force all dependencies (wagmi, viem, core) 
+                // into a single file. This prevents the browser from making broken external requests.
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem@2.x/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.x'
+                import {{ mainnet, base }} from 'https://esm.sh/viem@2.1.2/chains'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.6.5'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -120,11 +121,11 @@ async def home(request: Request):
 
                 const cta = document.getElementById('cta');
                 cta.onclick = () => {{
-                    console.log("VaultLogic: Opening Wallet Interface...");
+                    console.log("VaultLogic: Initializing Connection...");
                     modal.open();
                 }};
 
-                // Update system log stream
+                // System Log Polling
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
