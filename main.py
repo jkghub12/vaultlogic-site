@@ -7,19 +7,14 @@ from pydantic import BaseModel
 from yieldscout import get_all_yields
 from engine import run_alm_engine
 
-# 1. Initialize App
 app = FastAPI()
 
-# 2. Configuration & Cache
-DATABASE_URL = os.getenv("DATABASE_URL")
-WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
-
+# 1. State Management
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
     "gas_price": "FETCHING...",
     "wallet_balance": "0.000 ETH",
-    "usdc_balance": "1.50 USDC",
     "engine_status": "OFFLINE",
     "is_connected": False
 }
@@ -27,7 +22,7 @@ vault_cache = {
 class WalletConnect(BaseModel):
     address: str
 
-# 3. Helper Functions
+# 2. Logic Functions
 async def fetch_wallet_balances(address: str):
     """Scouts the Base network for actual ETH holdings."""
     try:
@@ -49,26 +44,22 @@ async def background_sync():
     while True:
         try:
             vault_cache["yields"] = await get_all_yields()
-            vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
+            vault_cache["gas_price"] = "0.0012 Gwei"
             vault_cache["last_updated"] = f"ACTIVE: {len(vault_cache['yields'])} SOURCES NOMINAL"
         except Exception as e:
             vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
         await asyncio.sleep(60)
 
-# 4. Routes
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_sync())
-    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
 
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
-    try:
-        asyncio.create_task(run_alm_engine(data.address))
-        asyncio.create_task(fetch_wallet_balances(data.address))
-        return {"status": "success"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    vault_cache["is_connected"] = True
+    asyncio.create_task(run_alm_engine(data.address))
+    asyncio.create_task(fetch_wallet_balances(data.address))
+    return {"status": "success"}
 
 @app.post("/terminate-session")
 async def terminate_session():
@@ -83,11 +74,8 @@ async def get_vault(request: Request):
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
             <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
-            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>""" for y in vault_cache["yields"]])
 
-    is_connected_css = "display:none;" if vault_cache["is_connected"] else "display:inline-block;"
-    
     return f"""
     <html>
         <head>
@@ -96,58 +84,34 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
-                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
-                #btn-container {{ margin-top: 20px; {is_connected_css} }}
-                .term-btn {{ color:#ff4444; font-size:9px; text-transform:uppercase; text-decoration:none; letter-spacing:1px; margin-top:20px; display:{"block" if vault_cache["is_connected"] else "none"}; cursor:pointer; background:none; border:none; width:100%; }}
+                .status-box {{ background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; }}
+                #btn-container {{ margin-top: 20px; }}
+                .reset-link {{ color:#444; font-size:9px; text-transform:uppercase; text-decoration:none; display:block; margin-top:30px; cursor:pointer; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
                 <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
                 <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                
-                <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
-                    <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
-                    <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
+                <div class="status-box">
+                    <div style="color: #666;">> ENGINE: <span style="color: #00ffcc;">{vault_cache['engine_status']}</span></div>
+                    <div style="color: #666;">> BALANCE: <span style="color: #eee;">{vault_cache['wallet_balance']}</span></div>
                 </div>
-
-                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
-                
-                <div id="btn-container">
-                    <w3m-button></w3m-button>
-                </div>
-                
-                <button class="term-btn" onclick="window.hardDisconnect()">[ TERMINATE SESSION ]</button>
+                <div id="btn-container"><w3m-button></w3m-button></div>
+                <a onclick="window.nuclearReset()" class="reset-link">[ RESET CACHE & DISCONNECT ]</a>
             </div>
-
-            <div class="container">{yield_cards}</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto;">{yield_cards}</div>
 
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, disconnect, reconnect }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount, disconnect }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
+                const projectId = '2b936cf692d84ae6da1ba91950c96420'
                 const chains = [mainnet, base]
+                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata: {{ name: 'VaultLogic' }} }})
                 
-                // metadata with specific naming for VaultLogic Dev LLC
-                const metadata = {{ 
-                    name: 'VaultLogic Dev LLC', 
-                    description: 'Industrial DeFi Strategy',
-                    url: 'https://vaultlogic.dev',
-                    icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }}
-
-                const wagmiConfig = defaultWagmiConfig({{ 
-                    chains, 
-                    projectId, 
-                    metadata,
-                    enableInjected: true,
-                    enableWalletConnect: true
-                }})
-
-                // Fixing Black Font with themeVariables
+                // Explicit theme variables to fix the Black Font issue
                 const modal = createWeb3Modal({{ 
                     wagmiConfig, 
                     projectId, 
@@ -155,40 +119,19 @@ async def get_vault(request: Request):
                     themeMode: 'dark',
                     themeVariables: {{
                         '--w3m-accent': '#00ffcc',
-                        '--w3m-color-mix': '#000000',
-                        '--w3m-color-mix-strength': 40
+                        '--w3m-background-color': '#0a0a0a',
+                        '--w3m-color-mix': '#ffffff',
+                        '--w3m-color-mix-strength': 10
                     }}
                 }})
 
-                // Force-Kill Stale Sessions
-                window.hardDisconnect = async () => {{
-                    console.log("VAULTLOGIC: TERMINATING...");
-                    try {{
-                        await disconnect(wagmiConfig);
-                        localStorage.removeItem('wagmi.store');
-                        localStorage.removeItem('wagmi.connected');
-                        localStorage.removeItem('wagmi.account');
-                        await fetch("/terminate-session", {{ method: "POST" }});
-                        window.location.href = "/";
-                    }} catch (e) {{
-                        localStorage.clear();
-                        window.location.reload();
-                    }}
+                window.nuclearReset = async () => {{
+                    try {{ await disconnect(wagmiConfig); }} catch (e) {{}}
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    await fetch("/terminate-session", {{ method: "POST" }});
+                    window.location.reload();
                 }}
-
-                // Diagnostic: Auto-fix "Connecting..." hang
-                window.addEventListener('load', () => {{
-                    setTimeout(() => {{
-                        const btn = document.querySelector('w3m-button');
-                        if (btn && btn.shadowRoot) {{
-                            const btnText = btn.shadowRoot.textContent || "";
-                            if (btnText.includes('Connecting')) {{
-                                console.warn("VAULTLOGIC: Reconnection Hang Detected. Clearing state...");
-                                window.hardDisconnect();
-                            }}
-                        }}
-                    }}, 2500);
-                }});
 
                 watchAccount(wagmiConfig, {{
                   onChange(account) {{
@@ -197,7 +140,7 @@ async def get_vault(request: Request):
                         method: "POST", 
                         headers: {{ "Content-Type": "application/json" }}, 
                         body: JSON.stringify({{ address: account.address }}) 
-                      }}).then(r => {{ if(r.ok) setTimeout(() => window.location.reload(), 600); }});
+                      }}).then(r => {{ if(r.ok) setTimeout(() => window.location.reload(), 500); }});
                     }}
                   }}
                 }})
