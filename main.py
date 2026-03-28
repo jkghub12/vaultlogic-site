@@ -86,4 +86,163 @@ async def get_strategy():
             <title>VaultLogic | Strategy</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body {{ background: #0a0a0a; color: #ccc; font-family: sans-serif; line-height: 1.8; padding: 60
+                body {{ background: #0a0a0a; color: #ccc; font-family: sans-serif; line-height: 1.8; padding: 60px 20px; }}
+                .container {{ max-width: 850px; margin: 0 auto; border-left: 1px solid #222; padding-left: 40px; }}
+                h1 {{ color: #00ffcc; letter-spacing: 4px; text-transform: uppercase; }}
+                h2 {{ color: #eee; margin-top: 40px; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px; }}
+                .highlight {{ color: #00ffcc; font-weight: bold; }}
+                .back {{ color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <a href="/" class="back">← Return to Command Center</a>
+                <h1>The Deterministic Vision</h1>
+                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems.</p>
+                <h2>I. Beyond Speculation</h2>
+                <p>Phase Alpha: Active Liquidity Management (ALM).</p>
+                <h2>II. Validation Tier</h2>
+                <p>Stress-testing performed at the $500 entry level.</p>
+                <h2>III. Regulatory Shield</h2>
+                <p>Compliant with the Clarity Act 2026.</p>
+            </div>
+        </body>
+    </html>
+    """
+
+@app.get("/audit", response_class=HTMLResponse)
+async def get_audit():
+    return """
+    <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
+                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
+                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
+                .status-line{margin:15px 0; font-size:16px; display:block;}
+                .btn{display:inline-block; margin-top:30px; padding:15px 30px; background:#00ffcc; color:#000; text-decoration:none; font-weight:bold; border-radius:4px; font-size:12px; text-transform:uppercase; letter-spacing:1px;}
+            </style>
+        </head>
+        <body>
+            <div class="box">
+                <h1>2026 CLARITY ACT AUDIT</h1>
+                <span class="status-line">Yield Classification: <span style="color:#00ffcc;">✅ VERIFIED</span></span>
+                <span class="status-line">Passive Interest Risk: <span style="color:#ff4444;">🚨 HIGH</span></span>
+                <a href="#" class="btn" onclick="alert('Phase 2 Vault Access Required.')">GENERATE DEFENSE REPORT</a><br>
+                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px; text-transform:uppercase; letter-spacing:2px;">← Return to Command Center</a>
+            </div>
+        </body>
+    </html>
+    """
+
+@app.get("/", response_class=HTMLResponse)
+async def get_vault(request: Request):
+    yield_cards = "".join([f"""
+        <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
+            <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
+            <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
+            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
+        </div>""" for y in vault_cache["yields"]])
+
+    is_connected_css = "display:none;" if vault_cache["is_connected"] else "display:inline-block;"
+    disconnect_link = '<a href="#" onclick="window.disconnectWallet()" style="color:#ff4444; font-size:9px; text-transform:uppercase; text-decoration:none; letter-spacing:1px; margin-top:10px; display:block; cursor:pointer;">[ TERMINATE SESSION ]</a>' if vault_cache["is_connected"] else ""
+
+    return f"""
+    <html>
+        <head>
+            <title>VaultLogic Command Center</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
+                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
+                .nav-links {{ margin-top: 20px; }}
+                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
+                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
+                .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
+                .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
+                #btn-container {{ margin-top: 20px; {is_connected_css} }}
+            </style>
+        </head>
+        <body>
+            <div class="mission-brief">
+                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
+                
+                <div style="background: #050505; border: 1px solid #222; padding: 15px; margin: 20px auto; max-width: 400px; font-family: monospace; font-size: 12px; text-align: left; border-left: 3px solid #00ffcc; line-height: 1.6;">
+                    <div style="color: #666;">> ENGINE_STATUS: <span style="color: #00ffcc;">{vault_cache.get('engine_status', 'OFFLINE')}</span></div>
+                    <div style="color: #666;">> ASSET_ETH: <span style="color: #eee;">{vault_cache.get('wallet_balance', '0.000 ETH')}</span></div>
+                    <div style="color: #666;">> ASSET_USDC: <span style="color: #eee;">{vault_cache.get('usdc_balance', '1.50 USDC')}</span></div>
+                </div>
+
+                <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
+                
+                <div id="btn-container">
+                    <w3m-button></w3m-button>
+                </div>
+                {disconnect_link}
+
+                <div class="nav-links">
+                    <a href="/strategy">Strategy Brief</a>
+                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                </div>
+            </div>
+
+            <div class="container">{yield_cards}</div>
+
+            <div class="simulator">
+                <h2 style="font-size: 14px; color: #00ffcc; text-transform: uppercase; letter-spacing: 3px;">Validation Tier Simulator ($500 Base)</h2>
+                <div style="display: flex; justify-content: space-around; padding: 20px;">
+                    <div style="text-align: left;">
+                        <p style="margin:0; font-size: 11px; color: #666;">PASSIVE HOLDING (2.8%)</p>
+                        <p style="margin:0; font-size: 20px;">$500.55</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="margin:0; font-size: 11px; color: #00ffcc;">VAULTLOGIC ACTIVE (ALM)</p>
+                        <p style="margin:0; font-size: 20px;">$534.20 <small style="font-size: 10px; color: #00ffcc;">(+$34.20 Proj.)</small></p>
+                    </div>
+                </div>
+            </div>
+
+            <script type="module">
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, disconnect }} from 'https://esm.sh/@wagmi/core'
+
+                const projectId = '{WC_PROJECT_ID}'
+                const metadata = {{
+                  name: 'VaultLogic Dev LLC',
+                  description: 'Industrial DeFi Strategy',
+                  url: 'https://vaultlogic.dev',
+                  icons: ['https://avatars.githubusercontent.com/u/37784886']
+                }}
+
+                const chains = [mainnet, base]
+                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
+                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains, themeMode: 'dark' }})
+
+                window.disconnectWallet = async () => {{
+                    try {{
+                        await disconnect(wagmiConfig);
+                        await fetch("/terminate-session", {{ method: "POST" }});
+                        window.location.reload();
+                    }} catch (err) {{
+                        console.error("LOGOUT ERROR:", err);
+                    }}
+                }}
+
+                watchAccount(wagmiConfig, {{
+                  onChange(account) {{
+                    if (account.isConnected && account.address) {{
+                      fetch("/connect-wallet", {{ 
+                        method: "POST", 
+                        headers: {{ "Content-Type": "application/json" }}, 
+                        body: JSON.stringify({{ address: account.address }}) 
+                      }}).then(r => {{ if(r.ok) setTimeout(() => window.location.reload(), 800); }});
+                    }}
+                  }}
+                }})
+            </script>
+        </body>
+    </html>
+    """
