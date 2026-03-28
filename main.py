@@ -78,7 +78,7 @@ async def home(request: Request):
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <button id="cta" class="btn" disabled>BOOTING KERNEL...</button>
+            <button id="cta" class="btn" disabled>SYNCHRONIZING...</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -88,61 +88,56 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Pinning stable versions of v3 to avoid the 'normalizeChainId' error in v4
-                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@3.5.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains?bundle'
-                import {{ reconnect, watchAccount }} from 'https://esm.sh/@wagmi/core@2.6.5?bundle'
+                // Using the Ethers-based bundle which is more robust against CDN path errors
+                import {{ createWeb3Modal, defaultEvmConfig }} from 'https://esm.sh/@web3modal/ethers5@3.5.1?bundle'
 
                 const projectId = '{WC_PROJECT_ID}';
-                const chains = [mainnet, base];
-                const config = defaultWagmiConfig({{ 
-                    chains, 
-                    projectId, 
-                    metadata: {{
-                        name: 'VaultLogic',
-                        description: 'Industrial ALM',
-                        url: window.location.origin,
-                        icons: ['https://avatars.githubusercontent.com/u/37784886']
+                const chains = [
+                    {{
+                        chainId: 8453,
+                        name: 'Base',
+                        currency: 'ETH',
+                        explorerUrl: 'https://basescan.org',
+                        rpcUrl: 'https://mainnet.base.org'
                     }}
+                ];
+
+                const modal = createWeb3Modal({{
+                    ethersConfig: defaultEvmConfig({{ 
+                        metadata: {{
+                            name: 'VaultLogic',
+                            description: 'Industrial ALM',
+                            url: window.location.origin,
+                            icons: ['https://avatars.githubusercontent.com/u/37784886']
+                        }}
+                    }}),
+                    chains,
+                    projectId,
+                    themeMode: 'dark'
                 }});
 
-                try {{
-                    const modal = createWeb3Modal({{ 
-                        wagmiConfig: config, 
-                        projectId, 
-                        themeMode: 'dark' 
-                    }});
+                const btn = document.getElementById('cta');
+                btn.innerText = "INITIALIZE ENGINE";
+                btn.disabled = false;
 
-                    const btn = document.getElementById('cta');
-                    btn.innerText = "INITIALIZE ENGINE";
-                    btn.disabled = false;
+                btn.onclick = () => modal.open();
 
-                    btn.onclick = () => modal.open();
+                // Listen for connection
+                modal.subscribeEvents(event => {{
+                    if (event.data.event === 'CONNECT_SUCCESS') {{
+                        const address = modal.getAddress();
+                        btn.innerText = "ENGINE ACTIVE";
+                        btn.style.background = "#111";
+                        btn.style.color = "#00ffcc";
+                        btn.disabled = true;
 
-                    reconnect(config);
-
-                    watchAccount(config, {{
-                        onChange(account) {{
-                            if (account.isConnected && account.address) {{
-                                btn.innerText = "ENGINE ACTIVE";
-                                btn.disabled = true;
-                                btn.style.background = "#111";
-                                btn.style.color = "#00ffcc";
-                                
-                                fetch("/connect-wallet", {{
-                                    method: "POST",
-                                    headers: {{ "Content-Type": "application/json" }},
-                                    body: JSON.stringify({{ address: account.address }})
-                                }});
-                            }}
-                        }}
-                    }});
-                }} catch (e) {{
-                    console.error("VaultLogic Kernel Bridge Failed", e);
-                    // Fallback to enable button even if modal logic has issues
-                    document.getElementById('cta').innerText = "ENGINE READY (MODAL ERR)";
-                    document.getElementById('cta').disabled = false;
-                }}
+                        fetch("/connect-wallet", {{
+                            method: "POST",
+                            headers: {{ "Content-Type": "application/json" }},
+                            body: JSON.stringify({{ address: address }})
+                        }});
+                    }}
+                }});
 
                 setInterval(async () => {{
                     try {{
