@@ -16,7 +16,7 @@ WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
-    "gas_price": "FETCHING...",
+    "gas_price": "0.0012 Gwei (OPTIMAL)",
 }
 
 class WalletConnect(BaseModel):
@@ -32,7 +32,6 @@ async def save_wallet(data: WalletConnect):
             conn.commit()
             cur.close()
             conn.close()
-        
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
         return {"status": "success"}
@@ -41,11 +40,11 @@ async def save_wallet(data: WalletConnect):
 
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
-    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Strategy</h1><a href="/">Back</a></body></html>"""
+    return "<html><body style='background:#0a0a0a;color:white;'><h1>Strategy Brief</h1><a href='/'>Return</a></body></html>"
 
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
-    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Audit</h1><a href="/">Back</a></body></html>"""
+    return "<html><body style='background:#0a0a0a;color:white;'><h1>Audit</h1><a href='/'>Return</a></body></html>"
 
 async def background_sync():
     while True:
@@ -64,7 +63,7 @@ async def startup_event():
 async def get_vault(request: Request):
     yield_cards = "".join([f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
-            <h3 style="margin: 0; color: #00ffcc; font-size: 14px;">{y['protocol']}</h3>
+            <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
             <small style="color: #666;">Asset: {y['asset']}</small>
         </div>""" for y in vault_cache["yields"]])
@@ -72,25 +71,35 @@ async def get_vault(request: Request):
     return f"""
     <html>
         <head>
-            <title>VaultLogic</title>
+            <title>VaultLogic Command Center</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
-                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; }}
+                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
                 .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
+                
+                /* Dashboard Table */
+                .vault-status-table {{ margin: 20px auto; border-collapse: collapse; width: 100%; max-width: 400px; font-family: monospace; font-size: 12px; }}
+                .vault-status-table td {{ border: 1px solid #222; padding: 10px; text-align: left; }}
+                .val {{ color: #00ffcc; font-weight: bold; text-align: right; }}
+                .label {{ color: #666; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
-                <h1 style="letter-spacing: 12px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px;">{vault_cache['last_updated']}</p>
+                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
+                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
                 
-                <div style="margin: 30px 0;">
-                    <w3m-button></w3m-button>
-                </div>
+                <table class="vault-status-table">
+                    <tr><td class="label">WALLET</td><td class="val" id="wallet-addr">NOT CONNECTED</td></tr>
+                    <tr><td class="label">ETH BALANCE (BASE)</td><td class="val" id="eth-bal">0.0000</td></tr>
+                    <tr><td class="label">USDC BALANCE (BASE)</td><td class="val" id="usdc-bal">0.00</td></tr>
+                </table>
 
-                <div class="nav-links">
+                <w3m-button></w3m-button>
+
+                <div class="nav-links" style="margin-top:20px;">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
                 </div>
@@ -101,32 +110,52 @@ async def get_vault(request: Request):
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+                import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const chains = [mainnet, base];
-                
-                // Fixed the configuration object to ensure it initializes correctly
                 const config = defaultWagmiConfig({{ 
                     chains, 
                     projectId, 
-                    metadata: {{ 
-                        name: 'VaultLogic', 
-                        url: 'https://vaultlogic.dev',
-                        icons: ['https://avatars.githubusercontent.com/u/37784886']
-                    }} 
+                    metadata: {{ name: 'VaultLogic', url: 'https://vaultlogic.dev' }} 
                 }});
-
+                
                 createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
 
                 watchAccount(config, {{
-                    onChange(acc) {{
+                    async onChange(acc) {{
+                        const addrEl = document.getElementById('wallet-addr');
+                        const ethEl = document.getElementById('eth-bal');
+                        const usdcEl = document.getElementById('usdc-bal');
+
                         if (acc.isConnected && acc.address) {{
+                            addrEl.innerText = acc.address.substring(0,6) + "..." + acc.address.substring(38);
+                            
+                            try {{
+                                // Fetch ETH Balance on Base
+                                const ethRes = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                                ethEl.innerText = parseFloat(ethRes.formatted).toFixed(4) + " ETH";
+
+                                // Fetch USDC Balance on Base
+                                const usdcRes = await getBalance(config, {{ 
+                                    address: acc.address, 
+                                    chainId: base.id, 
+                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+                                }});
+                                usdcEl.innerText = parseFloat(usdcRes.formatted).toFixed(2) + " USDC";
+                            }} catch (err) {{
+                                console.error("Balance fetch failed", err);
+                            }}
+
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
                                 headers: {{ "Content-Type": "application/json" }}, 
                                 body: JSON.stringify({{ address: acc.address }}) 
                             }});
+                        }} else {{
+                            addrEl.innerText = "NOT CONNECTED";
+                            ethEl.innerText = "0.0000";
+                            usdcEl.innerText = "0.00";
                         }}
                     }}
                 }});
