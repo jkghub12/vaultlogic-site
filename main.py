@@ -7,12 +7,11 @@ from pydantic import BaseModel
 from yieldscout import get_all_yields
 
 app = FastAPI()
-# Institutional Project ID for VaultLogic
 WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Shared state for the dashboard
-vault_cache = {"yields": [], "status": "SYSTEM READY: AWAITING AUTH"}
+# Shared state
+vault_cache = {"yields": [], "status": "SYSTEM READY"}
 system_logs = ["VaultLogic Kernel v2.1.0 Online", "Secure Channel Established."]
 
 class WalletConnect(BaseModel):
@@ -27,7 +26,6 @@ def add_log(msg):
 async def connect(data: WalletConnect):
     try:
         add_log(f"AUTH_SUCCESS: {data.address[:6]}...{data.address[-4:]}")
-        # Trigger the Engine Logic immediately upon connection
         from engine import run_alm_engine
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "ENGINE_ACTIVATED"}
@@ -67,21 +65,21 @@ async def home(request: Request):
                 body {{ background:#0a0a0a; color:white; font-family:sans-serif; text-align:center; padding:40px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
-                .btn:disabled {{ background: #222; color: #444; cursor: not-allowed; }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
-                    height:250px; overflow-y:auto; border-radius:8px; box-shadow: 0 0 20px rgba(0,255,204,0.05);
+                    height:250px; overflow-y:auto; border-radius:8px;
                 }}
                 .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
-                .log-entry:first-child {{ opacity: 1; font-weight: bold; color: white; }}
             </style>
         </head>
         <body>
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <button id="cta" class="btn" disabled>LOADING KERNEL...</button>
+            <div id="wallet-btn-container">
+                <button id="cta" class="btn">INITIALIZE ENGINE</button>
+            </div>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -91,12 +89,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                console.log("VaultLogic: Initializing Web3 Bridge...");
-                
-                // Optimized Bundle Imports
+                // Simplified, robust import for Ethers-based Web3Modal (fixes the normalizeChainId error)
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import * as ViemChains from 'https://esm.sh/viem/chains?bundle'
-                import * as WagmiCore from 'https://esm.sh/@wagmi/core?bundle'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains?bundle'
+                import {{ reconnect, watchAccount }} from 'https://esm.sh/@wagmi/core?bundle'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -106,45 +102,32 @@ async def home(request: Request):
                     icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }};
 
-                const chains = [ViemChains.mainnet, ViemChains.base];
+                const chains = [mainnet, base];
                 const config = defaultWagmiConfig({{ chains, projectId, metadata }});
+                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
-                try {{
-                    const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
-                    
-                    const btn = document.getElementById('cta');
-                    btn.innerText = "INITIALIZE ENGINE";
-                    btn.disabled = false;
-                    
-                    btn.onclick = () => {{
-                        console.log("VaultLogic: Opening Wallet Selector...");
-                        modal.open();
-                    }};
-                    
-                    WagmiCore.reconnect(config);
-                }} catch (err) {{
-                    console.error("VaultLogic Bridge Error:", err);
-                }}
+                reconnect(config);
 
-                // Listen for Connection to Trigger Backend Engine
-                WagmiCore.watchAccount(config, {{
-                    onChange(acc) {{
-                        if (acc.isConnected && acc.address) {{
-                            console.log("VaultLogic: Wallet Connected:", acc.address);
-                            document.getElementById('cta').innerText = "ENGINE ACTIVE";
-                            document.getElementById('cta').style.background = "#111";
-                            document.getElementById('cta').style.color = "#00ffcc";
+                const btn = document.getElementById('cta');
+                btn.onclick = () => modal.open();
+
+                // Listen for account changes
+                watchAccount(config, {{
+                    onChange(account) {{
+                        if (account.isConnected && account.address) {{
+                            btn.innerText = "ENGINE ACTIVE";
+                            btn.style.background = "#111";
+                            btn.style.color = "#00ffcc";
                             
-                            fetch("/connect-wallet", {{ 
-                                method: "POST", 
-                                headers: {{ "Content-Type": "application/json" }}, 
-                                body: JSON.stringify({{ address: acc.address }}) 
+                            fetch("/connect-wallet", {{
+                                method: "POST",
+                                headers: {{ "Content-Type": "application/json" }},
+                                body: JSON.stringify({{ address: account.address }})
                             }});
                         }}
                     }}
                 }});
 
-                // Poll Logs for Visual Feedback
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
