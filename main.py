@@ -17,9 +17,6 @@ vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
     "gas_price": "FETCHING...",
-    "wallet_balance": "0.000 ETH",
-    "usdc_balance": "0.00 USDC",
-    "engine_status": "OFFLINE"
 }
 
 class WalletConnect(BaseModel):
@@ -28,125 +25,72 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Check if DB URL exists before trying to connect
         if DATABASE_URL:
-            try:
-                conn = psycopg2.connect(DATABASE_URL)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
-                conn.commit()
-                cur.close()
-                conn.close()
-            except Exception as db_e:
-                print(f"[DB ERROR] {db_e}") # Log it, but don't stop the engine
-
-        # Import and trigger engine
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
+            conn.commit()
+            cur.close()
+            conn.close()
+        
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
-        
-        return {"status": "success", "engine": "activated"}
+        return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
-    return f"""
-    <html>
-        <head>
-            <title>VaultLogic | Strategy</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ background: #0a0a0a; color: #ccc; font-family: 'Segoe UI', sans-serif; line-height: 1.8; padding: 60px 20px; }}
-                .container {{ max-width: 850px; margin: 0 auto; border-left: 1px solid #222; padding-left: 40px; }}
-                h1 {{ color: #00ffcc; letter-spacing: 4px; text-transform: uppercase; }}
-                h2 {{ color: #eee; margin-top: 40px; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px; }}
-                .highlight {{ color: #00ffcc; font-weight: bold; }}
-                .back {{ color: #666; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 20px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <a href="/" class="back">← Return to Command Center</a>
-                <h1>The Deterministic Vision</h1>
-                <p>VaultLogic Dev LLC provides industrial-grade logic for complex systems.</p>
-                <h2>I. Beyond Speculation</h2>
-                <p>Phase Alpha focuses on Active Liquidity Management.</p>
-                <h2>II. Validation Tier</h2>
-                <p>Current stress-testing performed at the <strong>$500 entry level</strong>.</p>
-            </div>
-        </body>
-    </html>
-    """
+    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Strategy</h1><a href="/">Back</a></body></html>"""
 
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
-    return """
-    <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body{background:#0a0a0a;color:#eee;font-family:sans-serif;padding:50px 20px;text-align:center;}
-                h1{color:#00ffcc;letter-spacing:2px;margin-bottom:30px;}
-                .box{max-width:600px; margin:0 auto; padding:40px; border:1px solid #222; border-radius:12px; background:#111; text-align:center;}
-            </style>
-        </head>
-        <body>
-            <div class="box">
-                <h1>2026 CLARITY ACT AUDIT</h1>
-                <span style="color:#00ffcc;">✅ VERIFIED</span><br>
-                <a href="/" style="display:block; margin-top:40px; color:#666; text-decoration:none; font-size:11px;">← Return</a>
-            </div>
-        </body>
-    </html>
-    """
+    return """<html><body style="background:#0a0a0a;color:#ccc;padding:50px;"><h1>Audit</h1><a href="/">Back</a></body></html>"""
 
 async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                vault_cache["yields"] = await get_all_yields()
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR"
-            await asyncio.sleep(60)
+    while True:
+        try:
+            vault_cache["yields"] = await get_all_yields()
+            vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
+        except:
+            vault_cache["last_updated"] = "SYNC ERROR"
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_sync())
-    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING...", flush=True)
-    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
 
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    yield_cards = ""
-    for y in vault_cache["yields"]:
-        yield_cards += f"""
+    yield_cards = "".join([f"""
         <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
-            <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
+            <h3 style="margin: 0; color: #00ffcc; font-size: 14px;">{y['protocol']}</h3>
             <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
             <small style="color: #666;">Asset: {y['asset']}</small>
-        </div>"""
+        </div>""" for y in vault_cache["yields"]])
 
     return f"""
     <html>
         <head>
-            <title>VaultLogic Command Center</title>
+            <title>VaultLogic</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
-                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
+                .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; }}
                 .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
                 .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
-                .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
             </style>
         </head>
         <body>
             <div class="mission-brief">
-                <h1 style="letter-spacing: 12px; margin-bottom: 5px;">VAULTLOGIC</h1>
-                <p style="color: #00ffcc; font-size: 10px; letter-spacing: 2px;">{vault_cache['last_updated']}</p>
-                <div style="margin-top: 20px;"><w3m-button></w3m-button></div>
-                <div class="nav-links" style="margin-top:20px;">
+                <h1 style="letter-spacing: 12px;">VAULTLOGIC</h1>
+                <p style="color: #00ffcc; font-size: 10px;">{vault_cache['last_updated']}</p>
+                
+                <div style="margin: 30px 0;">
+                    <w3m-button></w3m-button>
+                </div>
+
+                <div class="nav-links">
                     <a href="/strategy">Strategy Brief</a>
                     <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
                 </div>
@@ -160,18 +104,20 @@ async def get_vault(request: Request):
                 import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
-                
-                // Using triple brackets for Python f-string safety
-                const metadata = {{
-                    name: 'VaultLogic Dev LLC',
-                    description: 'Industrial DeFi Strategy',
-                    url: 'https://vaultlogic.dev',
-                    icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }};
-
                 const chains = [mainnet, base];
-                const config = defaultWagmiConfig({{ chains, projectId, metadata }});
-                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains }});
+                
+                // Fixed the configuration object to ensure it initializes correctly
+                const config = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata: {{ 
+                        name: 'VaultLogic', 
+                        url: 'https://vaultlogic.dev',
+                        icons: ['https://avatars.githubusercontent.com/u/37784886']
+                    }} 
+                }});
+
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
 
                 watchAccount(config, {{
                     onChange(acc) {{
