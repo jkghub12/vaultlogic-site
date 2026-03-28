@@ -13,6 +13,7 @@ app = FastAPI()
 DATABASE_URL = os.getenv("DATABASE_URL")
 WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 
+# Source of truth
 vault_cache = {
     "yields": [],
     "last_updated": "SYSTEM INITIALIZING...",
@@ -75,7 +76,6 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']}</small>
         </div>""" for y in vault_cache["yields"]])
 
-    # NOTE: All CSS and JS braces below are doubled {{ }} to escape Python f-string parsing
     return f"""
     <html>
         <head>
@@ -117,20 +117,22 @@ async def get_vault(request: Request):
 
                 watchAccount(config, {{
                     async onChange(acc) {{
-                        if (acc.isConnected && !hasSynced) {{
-                            hasSynced = true; 
+                        if (acc.isConnected) {{
+                            // Always fetch fresh balances if connected
+                            const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                            let usdcVal = "0.00 USDC";
                             try {{
-                                const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
-                                let usdcVal = "0.00 USDC";
-                                try {{
-                                    const usdcB = await getBalance(config, {{ 
-                                        address: acc.address, 
-                                        chainId: base.id, 
-                                        token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
-                                    }});
-                                    usdcVal = usdcB.formatted.substring(0, 7) + " USDC";
-                                }} catch(e) {{ }}
+                                const usdcB = await getBalance(config, {{ 
+                                    address: acc.address, 
+                                    chainId: base.id, 
+                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+                                }});
+                                usdcVal = usdcB.formatted.substring(0, 7) + " USDC";
+                            }} catch(e) {{ }}
 
+                            // Only POST to server if the server doesn't know about us yet
+                            if (!hasSynced) {{
+                                hasSynced = true;
                                 const res = await fetch("/connect-wallet", {{ 
                                     method: "POST", 
                                     headers: {{ "Content-Type": "application/json" }}, 
@@ -141,11 +143,9 @@ async def get_vault(request: Request):
                                     }}) 
                                 }});
                                 if (res.ok) window.location.reload();
-                            }} catch(err) {{
-                                hasSynced = false;
                             }}
                         }
-                    }}
+                    }
                 }})
             </script>
         </body>
