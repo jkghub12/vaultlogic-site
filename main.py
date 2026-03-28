@@ -15,7 +15,6 @@ vault_cache = {
     "last_updated": "SYSTEM ACTIVE: 5 SOURCES",
     "gas_price": "0.0012 Gwei",
     "wallet_balance": "0.000 ETH",
-    "wallet_address": "NOT CONNECTED",
     "engine_status": "OFFLINE",
     "is_connected": False
 }
@@ -34,7 +33,6 @@ async def fetch_wallet_balances(address: str):
             if 'result' in data:
                 eth_val = int(data['result'], 16) / 10**18
                 vault_cache["wallet_balance"] = f"{eth_val:.4f} ETH"
-                vault_cache["wallet_address"] = address
                 vault_cache["engine_status"] = "SCOUTING ACTIVE"
                 vault_cache["is_connected"] = True
     except: pass
@@ -52,20 +50,15 @@ async def startup_event():
 
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
+    # Set connected state immediately to update UI on next reload
     vault_cache["is_connected"] = True
-    vault_cache["wallet_address"] = data.address
     asyncio.create_task(run_alm_engine(data.address))
     asyncio.create_task(fetch_wallet_balances(data.address))
     return {"status": "success"}
 
 @app.post("/terminate-session")
 async def terminate_session():
-    vault_cache.update({
-        "is_connected": False, 
-        "engine_status": "OFFLINE", 
-        "wallet_balance": "0.000 ETH",
-        "wallet_address": "NOT CONNECTED"
-    })
+    vault_cache.update({"is_connected": False, "engine_status": "OFFLINE", "wallet_balance": "0.000 ETH"})
     return {"status": "success"}
 
 @app.get("/", response_class=HTMLResponse)
@@ -76,6 +69,7 @@ async def get_vault(request: Request):
             <p style="margin:5px 0; font-size:22px; font-weight:bold;">{y['apy']}%</p>
         </div>""" for y in vault_cache["yields"]])
 
+    # Task (1) Logic: Only show status box and reset link if connected
     status_display = "block" if vault_cache["is_connected"] else "none"
     connect_button_display = "none" if vault_cache["is_connected"] else "block"
 
@@ -116,7 +110,6 @@ async def get_vault(request: Request):
             <p style="color:#00ffcc; font-size:10px; margin-bottom:30px;">{vault_cache['last_updated']}</p>
             
             <div class="status-box">
-                <div style="color: #666; margin-bottom: 5px;">> ADDR: <span style="color: #eee; font-size: 10px;">{vault_cache['wallet_address']}</span></div>
                 <div>> ENGINE: <span style="color:#00ffcc;">{vault_cache['engine_status']}</span></div>
                 <div>> BALANCE: <span style="color:#eee;">{vault_cache['wallet_balance']}</span></div>
                 <div style="color:#444; font-size:9px; margin-top:10px;">Network Fee: {vault_cache['gas_price']}</div>
@@ -177,3 +170,4 @@ async def get_vault(request: Request):
         </body>
     </html>
     """
+#
