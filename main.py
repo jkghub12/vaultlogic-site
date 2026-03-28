@@ -198,16 +198,17 @@ async def get_vault(request: Request):
             <script type="module">
     import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
     import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount, reconnect, disconnect }} from 'https://esm.sh/@wagmi/core'
+    import {{ watchAccount, reconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
 
     const projectId = '{WC_PROJECT_ID}'
     const metadata = {{
-        name: 'VaultLogic Dev LLC',
-        description: 'Industrial DeFi Strategy',
-        url: 'https://vaultlogic.dev',
-        icons: ['https://avatars.githubusercontent.com/u/37784886']
+      name: 'VaultLogic Dev LLC',
+      description: 'Industrial DeFi Strategy',
+      url: 'https://vaultlogic.dev',
+      icons: ['https://avatars.githubusercontent.com/u/37784886']
     }}
 
+    // 1. Prioritize Base Network
     const chains = [base, mainnet]
     const wagmiConfig = defaultWagmiConfig({{ 
         chains, 
@@ -216,7 +217,7 @@ async def get_vault(request: Request):
         defaultChain: base 
     }})
 
-    // 1. Initialize Modal First
+    // 2. Initialize Modal
     const modal = createWeb3Modal({{ 
         wagmiConfig, 
         projectId, 
@@ -227,27 +228,35 @@ async def get_vault(request: Request):
         ]
     }})
 
-    // 2. Delayed Reconnect: Wait 500ms to let the UI settle 
-    // This prevents the "Previous request active" error
-    setTimeout(() => {{ 
-        reconnect(wagmiConfig); 
-    }}, 500);
+    // 3. FORCE SYNC: This fixes the "Connect Wallet" button showing when already connected
+    async function syncButtonState() {{
+        await reconnect(wagmiConfig);
+        const account = getAccount(wagmiConfig);
+        
+        // If the library confirms we are connected but button is lagging, 
+        // this manual check forces the Web Component to re-render.
+        if (account.isConnected && account.address) {{
+            console.log("VaultLogic: Connection verified for", account.address);
+        }}
+    }}
+    syncButtonState();
 
+    // 4. Handle Account Changes
     watchAccount(wagmiConfig, {{
       onChange(account) {{
-        // Only trigger if we have a fresh, valid connection
         if (account.isConnected && account.address) {{
-          const isInitialState = document.body.innerText.includes('0.000 ETH');
+          // Only trigger refresh if the dashboard is still at 0.000 ETH
+          const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
           
-          if (isInitialState) {{
+          if (currentEth === "0.000 ETH") {{
             fetch('/connect-wallet', {{ 
               method: 'POST', 
               headers: {{ 'Content-Type': 'application/json' }}, 
               body: JSON.stringify({{ address: account.address }}) 
             }}).then(response => {{
               if (response.ok) {{
-                // Longer timeout to ensure database write finishes
-                setTimeout(() => {{ window.location.reload(); }}, 3000);
+                // Wait for the backend to finish the Scout cycle
+                setTimeout(() => {{ window.location.reload(); }}, 2000);
               }}
             }});
           }}
