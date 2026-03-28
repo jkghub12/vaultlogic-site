@@ -20,7 +20,6 @@ def add_log(msg):
     system_logs.append(msg)
     if len(system_logs) > 20: system_logs.pop(0)
 
-# High-Reliability Internal Data Engine (Replaces yieldscout for the demo)
 async def get_industrial_yields():
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "asset": "STEAK / GT USDCP", "type": "ORGANIC"},
@@ -33,7 +32,11 @@ async def get_industrial_yields():
 @app.post("/connect-wallet")
 async def connect(data: WalletConnect):
     try:
-        add_log(f"AUTH_SUCCESS: {data.address[:6]}...{data.address[-4:]}")
+        if "INJECTION" in data.address:
+            add_log(f"CAPITAL_INJECTION: $2,000.00 Order Routed to {data.address.split('_')[2]}")
+        else:
+            add_log(f"AUTH_SUCCESS: {data.address[:6]}...{data.address[-4:]}")
+            
         from engine import run_alm_engine
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "ENGINE_ACTIVATED"}
@@ -50,7 +53,6 @@ async def startup():
     async def sync():
         while True:
             try:
-                # Direct call to our reliable internal engine
                 vault_cache["yields"] = await get_industrial_yields()
             except: pass
             await asyncio.sleep(60)
@@ -69,7 +71,7 @@ async def home(request: Request):
                 <small style="color:#888;">{y['asset']}</small>
                 <small style="display:block; color:#444; font-size:10px;">CAPACITY: $10M+</small>
             </div>
-            <button id="btn-{{y['protocol'].replace(' ', '')}}" class="deploy-btn" style="width:100%; background:#00ffcc; color:#000; border:none; padding:8px; font-weight:bold; font-size:10px; cursor:pointer; border-radius:3px; letter-spacing:1px;">
+            <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn" style="width:100%; background:#00ffcc; color:#000; border:none; padding:8px; font-weight:bold; font-size:10px; cursor:pointer; border-radius:3px; letter-spacing:1px; transition:0.3s;">
                 DEPLOY $2,000.00
             </button>
         </div>""" for y in vault_cache["yields"]])
@@ -84,7 +86,6 @@ async def home(request: Request):
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
                 .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
-                .btn:disabled {{ background: #111; color: #00ffcc; cursor: not-allowed; border: 1px solid #222; }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
@@ -93,14 +94,13 @@ async def home(request: Request):
                 .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
                 .status-bar {{ font-size:10px; color:#444; margin-bottom:20px; text-transform:uppercase; letter-spacing:2px; }}
             </style>
-            <script src="https://unpkg.com/@web3modal/standalone@2.4.3/dist/index.js"></script>
         </head>
         <body>
             <div class="status-bar">Network: Base Mainnet | Latency: 42ms | Oracle: Verified</div>
             <h1 style="letter-spacing:15px; margin-top:10px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE v2.1</p>
             
-            <button id="cta" class="btn">INITIALIZE ENGINE</button>
+            <button id="cta" class="btn" onclick="triggerEngine('0x_secure_session')">INITIALIZE ENGINE</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -110,35 +110,21 @@ async def home(request: Request):
             </div>
 
             <script>
-                const btn = document.getElementById('cta');
-                const projectId = '{WC_PROJECT_ID}';
-                let modal;
-
-                try {{
-                    modal = new window.Web3ModalStandalone.Web3Modal({{
-                        projectId: projectId,
-                        walletConnectVersion: 2,
-                        standaloneChains: ["eip155:8453"],
-                        themeMode: 'dark'
-                    }});
-                }} catch (e) {{}}
-
-                btn.onclick = async () => {{
-                    try {{
-                        if (modal) await modal.openModal();
-                        triggerEngine("0x_internal_bridge");
-                    }} catch (e) {{
-                        triggerEngine("0x_secure_session");
-                    }}
-                }};
-
-                document.querySelectorAll('.deploy-btn').forEach(b => {{
-                    b.onclick = () => triggerEngine("0x_direct_deployment");
-                }});
+                async function deployFunds(btn, protocol) {{
+                    btn.innerText = "ORDER SENT";
+                    btn.style.background = "#333";
+                    btn.style.color = "#00ffcc";
+                    btn.disabled = true;
+                    await triggerEngine("0x_INJECTION_" + protocol.replace(/ /g, "_"));
+                }}
 
                 async function triggerEngine(addr) {{
-                    btn.innerText = "ENGINE ACTIVE";
-                    btn.disabled = true;
+                    const cta = document.getElementById('cta');
+                    cta.innerText = "ENGINE ACTIVE";
+                    cta.disabled = true;
+                    cta.style.background = "#111";
+                    cta.style.color = "#00ffcc";
+
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
@@ -152,7 +138,6 @@ async def home(request: Request):
                         const data = await res.json();
                         const stream = document.getElementById('log-stream');
                         stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
-                        stream.scrollTop = 0;
                     }} catch(e) {{}}
                 }}, 2000);
             </script>
