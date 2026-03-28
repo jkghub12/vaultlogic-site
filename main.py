@@ -75,6 +75,7 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']}</small>
         </div>""" for y in vault_cache["yields"]])
 
+    # NOTE: All CSS and JS braces below are doubled {{ }} to escape Python f-string parsing
     return f"""
     <html>
         <head>
@@ -144,7 +145,7 @@ async def get_vault(request: Request):
                                 hasSynced = false;
                             }}
                         }
-                    }
+                    }}
                 }})
             </script>
         </body>
