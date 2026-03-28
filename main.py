@@ -99,11 +99,11 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // INDUSTRIAL FIX: Use the 'bundle' query to force all dependencies (wagmi, viem, core) 
-                // into a single file. This prevents the browser from making broken external requests.
+                // FIX: Use the 'bundle' query to solve the 'normalizeChainId' and '404' errors.
+                // We point to the main viem entry and extract chains from there to avoid path errors.
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem@2.1.2/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.6.5'
+                import {{ mainnet, base }} from 'https://esm.sh/viem@2.1.2?bundle'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.6.5?bundle'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -121,11 +121,10 @@ async def home(request: Request):
 
                 const cta = document.getElementById('cta');
                 cta.onclick = () => {{
-                    console.log("VaultLogic: Initializing Connection...");
+                    console.log("VaultLogic: Initializing Terminal...");
                     modal.open();
                 }};
 
-                // System Log Polling
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
