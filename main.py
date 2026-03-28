@@ -245,23 +245,30 @@ async def get_vault(request: Request):
     }})
 
     // 2. STABLE RELOAD LOGIC
-    watchAccount(wagmiConfig, {{
+   watchAccount(wagmiConfig, {{
       onChange(account) {{
+        // 1. Check if we are connected AND have an address
         if (account.isConnected && account.address) {{
-          fetch("/connect-wallet", {{ 
-            method: "POST", 
-            headers: {{ "Content-Type": "application/json" }}, 
-            body: JSON.stringify({{ address: account.address }}) 
-          }}).then(response => {{
-            if (response.ok) {{
-                // We only reload if the current balance shown is 0.
-                // This prevents the "infinite disconnect" loop.
-                const currentEth = document.body.innerText.includes("0.000 ETH");
-                if (currentEth) {{
-                    setTimeout(() => {{ window.location.reload(); }}, 1000);
-                }}
-            }}
-          }});
+          
+          // 2. Only talk to the server if the UI currently shows 0.000 ETH
+          // This prevents the 'infinite reload' that breaks the button state
+          const isInitialState = document.body.innerText.includes('0.000 ETH');
+          
+          if (isInitialState) {{
+            fetch('/connect-wallet', {{ 
+              method: 'POST', 
+              headers: {{ 'Content-Type': 'application/json' }}, 
+              body: JSON.stringify({{ address: account.address }}) 
+            }}).then(response => {{
+              if (response.ok) {{
+                // 3. Give the wallet 2.5 seconds to "Lock In" the session 
+                // to LocalStorage before we refresh the page.
+                setTimeout(() => {{ 
+                  window.location.reload(); 
+                }}, 2500);
+              }
+            }});
+          }}
         }}
       }}
     }})
