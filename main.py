@@ -84,9 +84,6 @@ async def home(request: Request):
                 }}
                 .log-entry {{ border-bottom:1px solid #111; padding:5px 0; }}
             </style>
-            <!-- STABLE CDN: Using the Web3Modal AppKit bundle directly -->
-            <script src="https://unpkg.com/@web3modal/wagmi@4.1.1/dist/index.umd.js"></script>
-            <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
         </head>
         <body>
             <h1 style="letter-spacing:15px; margin-bottom: 5px;">VAULTLOGIC</h1>
@@ -102,10 +99,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Direct import from esm.sh but with a bundled query to force resolution
+                // THIS IS THE FIX: Using the all-in-one bundled version to stop the normalizeChainId error
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
+                import {{ mainnet, base }} from 'https://esm.sh/viem@2.x/chains'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.x'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -119,16 +116,15 @@ async def home(request: Request):
                 const config = defaultWagmiConfig({{ chains, projectId, metadata }});
                 const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
-                // Attach click listener immediately
-                const cta = document.getElementById('cta');
-                cta.onclick = () => {{
-                   console.log("Opening Modal...");
-                   modal.open();
-                }};
-
                 reconnect(config);
 
-                // Poll logs every 2 seconds
+                const cta = document.getElementById('cta');
+                cta.onclick = () => {{
+                    console.log("VaultLogic: Opening Wallet Interface...");
+                    modal.open();
+                }};
+
+                // Update system log stream
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
