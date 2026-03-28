@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from yieldscout import get_all_yields
 
 app = FastAPI()
+# Institutional Project ID for VaultLogic
 WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -66,13 +67,13 @@ async def home(request: Request):
                 body {{ background:#0a0a0a; color:white; font-family:sans-serif; text-align:center; padding:40px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
-                .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
+                .btn:disabled {{ background: #222; color: #444; cursor: not-allowed; }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
-                    height:250px; overflow-y:auto; border-radius:8px;
+                    height:250px; overflow-y:auto; border-radius:8px; box-shadow: 0 0 20px rgba(0,255,204,0.05);
                 }}
-                .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 12px; }}
+                .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
                 .log-entry:first-child {{ opacity: 1; font-weight: bold; color: white; }}
             </style>
         </head>
@@ -80,7 +81,7 @@ async def home(request: Request):
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <button id="cta" class="btn">INITIALIZE ENGINE</button>
+            <button id="cta" class="btn" disabled>LOADING KERNEL...</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -90,7 +91,9 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Use the bundle query to avoid 404s and missing export errors
+                console.log("VaultLogic: Initializing Web3 Bridge...");
+                
+                // Optimized Bundle Imports
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
                 import * as ViemChains from 'https://esm.sh/viem/chains?bundle'
                 import * as WagmiCore from 'https://esm.sh/@wagmi/core?bundle'
@@ -105,24 +108,29 @@ async def home(request: Request):
 
                 const chains = [ViemChains.mainnet, ViemChains.base];
                 const config = defaultWagmiConfig({{ chains, projectId, metadata }});
-                const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
-                WagmiCore.reconnect(config);
+                try {{
+                    const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
+                    
+                    const btn = document.getElementById('cta');
+                    btn.innerText = "INITIALIZE ENGINE";
+                    btn.disabled = false;
+                    
+                    btn.onclick = () => {{
+                        console.log("VaultLogic: Opening Wallet Selector...");
+                        modal.open();
+                    }};
+                    
+                    WagmiCore.reconnect(config);
+                }} catch (err) {{
+                    console.error("VaultLogic Bridge Error:", err);
+                }}
 
-                document.getElementById('cta').onclick = () => modal.open();
-
-                setInterval(async () => {{
-                    try {{
-                        const res = await fetch('/logs');
-                        const data = await res.json();
-                        const stream = document.getElementById('log-stream');
-                        stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
-                    }} catch(e) {{}}
-                }}, 2000);
-
+                // Listen for Connection to Trigger Backend Engine
                 WagmiCore.watchAccount(config, {{
                     onChange(acc) {{
                         if (acc.isConnected && acc.address) {{
+                            console.log("VaultLogic: Wallet Connected:", acc.address);
                             document.getElementById('cta').innerText = "ENGINE ACTIVE";
                             document.getElementById('cta').style.background = "#111";
                             document.getElementById('cta').style.color = "#00ffcc";
@@ -135,6 +143,16 @@ async def home(request: Request):
                         }}
                     }}
                 }});
+
+                // Poll Logs for Visual Feedback
+                setInterval(async () => {{
+                    try {{
+                        const res = await fetch('/logs');
+                        const data = await res.json();
+                        const stream = document.getElementById('log-stream');
+                        stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
+                    }} catch(e) {{}}
+                }}, 2000);
             </script>
         </body>
     </html>
