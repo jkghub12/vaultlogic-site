@@ -99,11 +99,10 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // FIX: Use the 'bundle' query to solve the 'normalizeChainId' and '404' errors.
-                // We point to the main viem entry and extract chains from there to avoid path errors.
+                // Using stable un-pinned versions with a unified bundle request
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem@2.1.2?bundle'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.6.5?bundle'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
@@ -117,14 +116,12 @@ async def home(request: Request):
                 const config = defaultWagmiConfig({{ chains, projectId, metadata }});
                 const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains, themeMode: 'dark' }});
                 
+                // Expose modal to window so the button can always find it
+                window.vaultModal = modal;
+
                 reconnect(config);
 
-                const cta = document.getElementById('cta');
-                cta.onclick = () => {{
-                    console.log("VaultLogic: Initializing Terminal...");
-                    modal.open();
-                }};
-
+                // Polling for logs
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
@@ -134,13 +131,15 @@ async def home(request: Request):
                     }} catch(e) {{}}
                 }}, 2000);
 
+                // Watch for account connection
                 watchAccount(config, {{
                     onChange(acc) {{
                         if (acc.isConnected && acc.address) {{
-                            cta.innerText = "ENGINE ACTIVE";
-                            cta.style.background = "#111";
-                            cta.style.color = "#00ffcc";
-                            cta.style.border = "1px solid #00ffcc";
+                            const btn = document.getElementById('cta');
+                            btn.innerText = "ENGINE ACTIVE";
+                            btn.style.background = "#111";
+                            btn.style.color = "#00ffcc";
+                            btn.style.border = "1px solid #00ffcc";
                             
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
@@ -148,6 +147,17 @@ async def home(request: Request):
                                 body: JSON.stringify({{ address: acc.address }}) 
                             }});
                         }}
+                    }}
+                }});
+            </script>
+
+            <script>
+                // Fallback click listener outside the module scope
+                document.getElementById('cta').addEventListener('click', function() {{
+                    if (window.vaultModal) {{
+                        window.vaultModal.open();
+                    }} else {{
+                        console.error("VaultLogic: Kernel still loading...");
                     }}
                 }});
             </script>
