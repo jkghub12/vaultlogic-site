@@ -212,10 +212,10 @@ async def get_vault(request: Request):
                 <p style="font-size: 10px; color: #444;">*Projected 14-day cycle performance based on Uniswap V3 WETH/USDC efficiency.</p>
             </div>
 
-           <script type="module">
+<script type="module">
     import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
     import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount }} from 'https://esm.sh/@wagmi/core'
+    import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core' // Added reconnect
 
     const projectId = '{WC_PROJECT_ID}'
     const metadata = {{
@@ -232,6 +232,10 @@ async def get_vault(request: Request):
         metadata,
         defaultChain: base 
     }})
+
+    // --- CRITICAL: ADD THIS LINE ---
+    // This forces Wagmi to check for an existing session on page load
+    reconnect(wagmiConfig)
 
     const modal = createWeb3Modal({{ 
         wagmiConfig, 
