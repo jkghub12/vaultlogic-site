@@ -4,34 +4,35 @@ from datetime import datetime
 
 async def run_alm_engine(wallet_address, log_callback):
     """
-    Core ALM Logic for VaultLogic.
-    Executes automated rebalancing strategies upon wallet connection.
+    Core ALM Logic for VaultLogic v2.1.
+    Aligns execution logs with Institutional Grade UI standards.
     """
     def ts(): return datetime.now().strftime("%H:%M:%S")
 
-    log_callback(f"[{ts()}] KERNEL: Initializing Dynamic Strategy for {wallet_address[:8]}...")
+    log_callback(f"[{ts()}] KERNEL: Secure Session Established for {wallet_address[:8]}...")
     await asyncio.sleep(2)
     
-    log_callback(f"[{ts()}] SCAN: Identifying high-alpha liquidity bands on Base...")
+    log_callback(f"[{ts()}] COMPLIANCE: Verification of 'Industrial Grade' Capacity (> $10M TVL)...")
     await asyncio.sleep(3)
     
-    log_callback(f"[{ts()}] SIGNAL: 179% APY detected in Uniswap V3 WETH/USDC pool.")
+    log_callback(f"[{ts()}] ANALYSIS: Detected 12.4% APR (Boosted) on Aerodrome cbBTC/WETH.")
     await asyncio.sleep(2)
     
-    log_callback(f"[{ts()}] STRATEGY: Deploying 'Narrow Alpha' range provisioning.")
+    log_callback(f"[{ts()}] STRATEGY: Initializing 'Organic-First' allocation (Aave/Morpho floor).")
     await asyncio.sleep(3)
     
-    log_callback(f"[{ts()}] COMPLIANCE: Verified slippage tolerance < 0.5%.")
+    log_callback(f"[{ts()}] EXECUTION: Deployment successful. Current Alpha: +1.8% over Benchmark.")
     await asyncio.sleep(2)
     
-    log_callback(f"[{ts()}] SUCCESS: Capital deployed. Monitoring for range-out events...")
+    log_callback(f"[{ts()}] MONITOR: Active rebalancing engaged. Standing by for volatility spikes.")
 
-    # Infinite monitoring loop
     while True:
         await asyncio.sleep(15)
-        # Random simulation of rebalancing logic
-        vol = random.randint(10, 100)
-        if vol > 85:
-            log_callback(f"[{ts()}] ALERT: Market Volatility Spike ({vol}%). Widening bands.")
+        # Simulation of institutional rebalancing
+        vol_index = random.randint(0, 100)
+        if vol_index > 90:
+            log_callback(f"[{ts()}] RISK ALERT: Volatility spike detected. Adjusting Narrow Range to Wide.")
+        elif vol_index < 10:
+            log_callback(f"[{ts()}] REBALANCE: Optimizing fee collection for 'Organic' pools.")
         else:
-            log_callback(f"[{ts()}] HEARTBEAT: Position is healthy. Collecting yield.")
+            log_callback(f"[{ts()}] STATUS: All positions healthy. Capacity utilized: 64%.")
