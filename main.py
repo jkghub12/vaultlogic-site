@@ -196,81 +196,71 @@ async def get_vault(request: Request):
             </div>
 
 <script type="module">
-    import { createWeb3Modal, defaultWagmiConfig } from 'https://esm.sh/@web3modal/wagmi'
-    import { mainnet, base } from 'https://esm.sh/viem/chains'
+    import { createAppKit } from 'https://esm.sh/@reown/appkit'
+    import { mainnet, base } from 'https://esm.sh/@reown/appkit/networks'
+    import { WagmiAdapter } from 'https://esm.sh/@reown/appkit-adapter-wagmi'
     import { watchAccount, reconnect, disconnect, getAccount, signMessage } from 'https://esm.sh/@wagmi/core'
 
     const projectId = '{WC_PROJECT_ID}'
-    const metadata = {
-      name: 'VaultLogic Dev LLC',
-      url: 'https://vaultlogic.dev',
-      description: 'Industrial DeFi Strategy',
-      icons: ['https://avatars.githubusercontent.com/u/37784886']
-    }
+    const networks = [base, mainnet]
 
-    const chains = [base, mainnet]
-    const wagmiConfig = defaultWagmiConfig({ 
-        chains, 
-        projectId, 
-        metadata, 
-        enableInjected: true,
-        enableCoinbase: true,
-        defaultChain: base 
+    // 1. The Adapter: This is the "Engine" YieldSeeker uses
+    const wagmiAdapter = new WagmiAdapter({
+        projectId,
+        networks
     })
 
-    const modal = createWeb3Modal({ wagmiConfig, projectId, chains })
+    // 2. The AppKit: This is the actual Interface
+    const modal = createAppKit({
+        adapters: [wagmiAdapter],
+        networks,
+        projectId,
+        features: { analytics: false, email: false, socials: false },
+        themeMode: 'dark'
+    })
 
-    // --- 1. THE RESET (STOPS THE "DECLINED" ERROR) ---
-    async function safetyReset() {
-        const account = getAccount(wagmiConfig);
-        // If we are stuck in a "Connecting" loop, we kill it immediately.
-        if (account.status === 'connecting' || account.status === 'reconnecting') {
-            console.log("VaultLogic: Clearing pending request...");
-            await disconnect(wagmiConfig);
-        }}
-
-    // Trigger the reset whenever the user interacts with the button
-    window.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'W3M-BUTTON') safetyReset();
-    }, true);
-
-    // --- 2. THE SIGN-IN LOGIC (YIELDSEEKER STYLE) ---
-    async function handleAuth(address) {
+    // --- ZERO-DEFECT RECOVERY ---
+    async function forceSync() {
         try {
-            const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
-            // Only proceed if the dashboard is currently empty
-            if (currentEth !== "0.000 ETH") return;
+            const state = getAccount(wagmiAdapter.wagmiConfig);
+            // If we are stuck in "Connecting", we force a reset
+            if (state.status === 'connecting') {
+                await disconnect(wagmiAdapter.wagmiConfig);
+            }
+            await reconnect(wagmiAdapter.wagmiConfig);
+        } catch (e) { console.warn("Reset handled."); }
+    }
+    forceSync();
 
-            // Step A: Request the Signature (Proof of Ownership)
-            await signMessage(wagmiConfig, {
-                message: `VaultLogic Security Update\\n\\nVerify Wallet: ${address}\\nSession: ${new Date().toISOString()}`
+    // --- THE "SIGN-IN" PROTOCOL ---
+    async function secureSignIn(address) {
+        const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
+        if (currentEth !== "0.000 ETH") return;
+
+        try {
+            // This is the "Sign In" pop-up you saw on YieldSeeker
+            await signMessage(wagmiAdapter.wagmiConfig, {
+                message: `VaultLogic Auth\\nAddress: ${address}\\nTS: ${Date.now()}`
             });
 
-            // Step B: Send to Python Backend
-            const response = await fetch('/connect-wallet', {
+            const res = await fetch('/connect-wallet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: address })
+                body: JSON.stringify({ address })
             });
-
-            if (response.ok) {
-                // Short delay to allow the "Success" toast to show in the wallet
-                setTimeout(() => window.location.reload(), 1000);
-            }
+            if (res.ok) setTimeout(() => window.location.reload(), 1200);
         } catch (err) {
-            console.error("Auth Canceled:", err);
-            // If they cancel the signature, we disconnect so the next attempt is fresh
-            await disconnect(wagmiConfig);
-        }}
-
-    // --- 3. THE WATCHER ---
-    reconnect(wagmiConfig);
-    watchAccount(wagmiConfig, {
-      onChange(account) {
-        if (account.isConnected && account.address) {
-            handleAuth(account.address);
+            // If they decline, we wipe the state so they can try again immediately
+            await disconnect(wagmiAdapter.wagmiConfig);
         }
-      }
+    }
+
+    watchAccount(wagmiAdapter.wagmiConfig, {
+        onChange(account) {
+            if (account.isConnected && account.address) {
+                secureSignIn(account.address);
+            }
+        }
     })
 </script>
         </body>
