@@ -1,54 +1,28 @@
-# engine.py
 import asyncio
+from yieldscout import get_all_yields, evaluate_opportunity
 
-async def run_alm_engine(wallet_address, is_debug=False):
-    """
-    The VaultLogic Deterministic Scout.
-    """
-    print(f"\n[SYSTEM] VAULTLOGIC CORE ENGAGED", flush=True)
-    print(f"[INFO] Targeting Wallet: {wallet_address}", flush=True)
+async def run_alm_engine(wallet_address, log_callback=None):
+    def log(m):
+        if log_callback: log_callback(m)
+        print(f"[ENGINE] {m}")
+
+    log(f"Deterministic Engine Attached to {wallet_address[:8]}")
+    current_pos = {"protocol": "AAVE V3", "apy": 2.87}
     
-    # Simulation settings for debugging
-    iterations = 5 if is_debug else float('inf')
-    count = 0
-    
-    # Use a faster sleep for local debugging, 60s for live production
-    sleep_interval = 2 if is_debug else 60
-    
-    while count < iterations:
+    while True:
         try:
-            # --- SCOUT LOGIC START ---
-            # 1. Simulate fetching Base Network Yields
-            # 2. Simulate ALM Range Calculation
+            yields = await get_all_yields()
+            best_opp = max(yields, key=lambda x: float(x['apy']))
             
-            print(f"--- Cycle {count + 1} ---", flush=True)
-            print(f"LOGIC: Checking Uniswap V3 USDC/WETH Liquidity...", flush=True)
+            report = evaluate_opportunity(current_pos['apy'], best_opp['apy'])
             
-            # Placeholder for your deterministic math:
-            # apy_scout = 18.4 
-            # if apy_scout > 15: execute_rebalance()
-            
-            print(f"STATUS: Velocity Optimized for {wallet_address[:8]}. No intervention required.", flush=True)
-            # --- SCOUT LOGIC END ---
-            
-            count += 1
-            await asyncio.sleep(sleep_interval) 
+            if report['is_viable']:
+                log(f"Rebalance Triggered: {current_pos['protocol']} -> {best_opp['protocol']} (+{report['delta']}% Delta)")
+                current_pos = best_opp
+            else:
+                log(f"Holding {current_pos['protocol']}. Target Delta ({report['delta']}%) below 5% threshold.")
+                
         except Exception as e:
-            print(f"[ERROR] Engine Failure for {wallet_address}: {e}", flush=True)
-            break
+            log(f"Sensor Error: {str(e)}")
             
-    if is_debug:
-        print("\n[SYSTEM] Debug Run Complete. Logic Verified.", flush=True)
-
-# --- THE DEBUGGER BLOCK ---
-if __name__ == "__main__":
-    # This part ONLY runs when you type 'python engine.py'
-    print("RUNNING ENGINE IN ISOLATED DEBUG MODE...", flush=True)
-    
-    # Mock a wallet address for the test
-    test_wallet = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-    
-    try:
-        asyncio.run(run_alm_engine(test_wallet, is_debug=True))
-    except KeyboardInterrupt:
-        print("\nDebug stopped by user.", flush=True)
+        await asyncio.sleep(600)
