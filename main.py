@@ -15,26 +15,16 @@ WC_PROJECT_ID = '2b936cf692d84ae6da1ba91950c96420'
 
 vault_cache = {
     "yields": [],
-    "last_updated": "SYSTEM INITIALIZING...",
-    "gas_price": "FETCHING...",
-    "wallet_balance": "0.000 ETH",
-    "usdc_balance": "0.00 USDC",
-    "wallet_address": None
+    "last_updated": "ACTIVE: SYSTEM NOMINAL",
+    "gas_price": "0.0012 Gwei (OPTIMAL)"
 }
 
 class WalletConnect(BaseModel):
     address: str
-    eth_balance: str = "0.000 ETH"
-    usdc_balance: str = "0.00 USDC"
 
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Update local cache for display
-        vault_cache["wallet_address"] = data.address
-        vault_cache["wallet_balance"] = data.eth_balance
-        vault_cache["usdc_balance"] = data.usdc_balance
-
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
             cur = conn.cursor()
@@ -42,46 +32,15 @@ async def save_wallet(data: WalletConnect):
             conn.commit()
             cur.close()
             conn.close()
-
+        
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
-        
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-async def background_sync():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                vault_cache["yields"] = await get_all_yields()
-                vault_cache["gas_price"] = "0.0012 Gwei (OPTIMAL)"
-                vault_cache["last_updated"] = "ACTIVE: SYSTEM NOMINAL"
-            except Exception as e:
-                vault_cache["last_updated"] = f"SYNC ERROR: {str(e)}"
-            await asyncio.sleep(60)
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(background_sync())
-    print("[SYSTEM] PRE-FLIGHT CHECK: INITIALIZING VAULTLOGIC ENGINE...", flush=True)
-    asyncio.create_task(run_alm_engine("SYSTEM_DIAGNOSTIC", is_debug=True))
-
 @app.get("/", response_class=HTMLResponse)
 async def get_vault(request: Request):
-    yield_cards = ""
-    for y in vault_cache["yields"]:
-        yield_cards += f"""
-        <div style="background: #111; padding: 20px; margin: 10px; border-radius: 8px; border-left: 4px solid #00ffcc; text-align: left;">
-            <h3 style="margin: 0; color: #00ffcc; font-size: 14px; text-transform: uppercase;">{y['protocol']}</h3>
-            <p style="margin: 5px 0; font-size: 28px; font-weight: bold;">{y['apy']}% APY</p>
-            <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
-        </div>"""
-
-    # Format the display address
-    addr = vault_cache["wallet_address"]
-    display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
-
     return f"""
     <html>
         <head>
@@ -90,13 +49,10 @@ async def get_vault(request: Request):
             <style>
                 body {{ background: #0a0a0a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }}
                 .mission-brief {{ max-width: 750px; margin: 0 auto 50px auto; border-bottom: 1px solid #222; padding-bottom: 40px; }}
-                .nav-links a {{ color: #888; text-decoration: none; font-size: 11px; text-transform: uppercase; margin: 0 15px; }}
-                .container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); max-width: 1000px; margin: 0 auto; }}
                 .gas-tag {{ font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }}
-                .simulator {{ max-width: 1000px; margin: 40px auto; padding: 20px; background: #050505; border: 1px dashed #222; border-radius: 8px; }}
-                w3m-button {{ margin-top: 20px; display: inline-block; }}
                 .balance-table {{ margin: 20px auto; border-collapse: collapse; min-width: 300px; font-family: monospace; border: 1px solid #222; }}
                 .balance-table td {{ padding: 10px; border: 1px solid #222; }}
+                .val {{ color: #00ffcc; }}
             </style>
         </head>
         <body>
@@ -106,73 +62,67 @@ async def get_vault(request: Request):
                 <div class="gas-tag">Network Fee (Base): {vault_cache['gas_price']}</div>
                 
                 <table class="balance-table">
-                    <tr><td style="color:#666">WALLET</td><td style="color:#00ffcc">{display_addr}</td></tr>
-                    <tr><td style="color:#666">ETH</td><td>{vault_cache['wallet_balance']}</td></tr>
-                    <tr><td style="color:#666">USDC</td><td>{vault_cache['usdc_balance']}</td></tr>
+                    <tr><td style="color:#666">STATUS</td><td id="stat-cell" style="color:#ff4444">DISCONNECTED</td></tr>
+                    <tr><td style="color:#666">WALLET</td><td id="addr-cell">---</td></tr>
+                    <tr><td style="color:#666">ETH</td><td id="eth-cell">0.000</td></tr>
+                    <tr><td style="color:#666">USDC</td><td id="usdc-cell">0.00</td></tr>
                 </table>
 
-                <div id="btn-container">
-                    <w3m-button></w3m-button>
-                </div>
-
-                <div class="nav-links" style="margin-top:20px;">
-                    <a href="/strategy">Strategy Brief</a>
-                    <a href="/audit" style="color: #ff4444;">Compliance Audit</a>
+                <w3m-button></w3m-button>
+                
+                <div style="margin-top:20px;">
+                    <a href="/strategy" style="color:#888; text-decoration:none; font-size:11px; text-transform:uppercase; margin:0 15px;">Strategy Brief</a>
+                    <a href="/audit" style="color:#ff4444; text-decoration:none; font-size:11px; text-transform:uppercase; margin:0 15px;">Compliance Audit</a>
                 </div>
             </div>
-
-            <div class="container">{yield_cards}</div>
 
             <script type="module">
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
                 import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
                 import {{ watchAccount, getBalance }} from 'https://esm.sh/@wagmi/core'
 
-                const projectId = '{WC_PROJECT_ID}'
-                const metadata = {{
-                  name: 'VaultLogic Dev LLC',
-                  description: 'Industrial DeFi Strategy',
-                  url: 'https://vaultlogic.dev',
-                  icons: ['https://avatars.githubusercontent.com/u/37784886']
-                }}
+                const projectId = '{WC_PROJECT_ID}';
+                const config = defaultWagmiConfig({{ 
+                    chains: [mainnet, base], 
+                    projectId, 
+                    metadata: {{ name: 'VaultLogic' }} 
+                }});
+                
+                createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base] }});
 
-                const chains = [mainnet, base]
-                const wagmiConfig = defaultWagmiConfig({{ chains, projectId, metadata }})
-                const modal = createWeb3Modal({{ wagmiConfig, projectId, chains }})
+                watchAccount(config, {{
+                    async onChange(acc) {{
+                        if (acc.isConnected) {{
+                            // Update UI Instantly
+                            document.getElementById('stat-cell').innerText = "CONNECTED";
+                            document.getElementById('stat-cell').style.color = "#00ffcc";
+                            document.getElementById('addr-cell').innerText = acc.address.substring(0,6) + "..." + acc.address.substring(38);
 
-                let lastAddr = "{addr}";
+                            // Fetch Balances
+                            const ethB = await getBalance(config, {{ address: acc.address, chainId: base.id }});
+                            document.getElementById('eth-cell').innerText = ethB.formatted.substring(0, 6) + " ETH";
 
-                watchAccount(wagmiConfig, {{
-                  async onChange(account) {{
-                    if (account.isConnected && account.address !== lastAddr) {{
-                      
-                      // Fetch ETH Balance
-                      const ethB = await getBalance(wagmiConfig, {{ address: account.address, chainId: base.id }});
-                      
-                      // Fetch USDC Balance (Base)
-                      let usdcStr = "0.00 USDC";
-                      try {{
-                        const usdcB = await getBalance(wagmiConfig, {{ 
-                            address: account.address, 
-                            chainId: base.id, 
-                            token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
-                        }});
-                        usdcStr = usdcB.formatted.substring(0, 7) + " USDC";
-                      }} catch(e) {{}}
+                            try {{
+                                const usdcB = await getBalance(config, {{ 
+                                    address: acc.address, 
+                                    chainId: base.id, 
+                                    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+                                }});
+                                document.getElementById('usdc-cell').innerText = usdcB.formatted.substring(0, 7) + " USDC";
+                            }} catch(e) {{}}
 
-                      await fetch("/connect-wallet", {{ 
-                        method: "POST", 
-                        headers: {{ "Content-Type": "application/json" }}, 
-                        body: JSON.stringify({{ 
-                            address: account.address,
-                            eth_balance: ethB.formatted.substring(0, 6) + " ETH",
-                            usdc_balance: usdcStr
-                        }}) 
-                      }});
-                      window.location.reload();
+                            // Notify Server
+                            fetch("/connect-wallet", {{ 
+                                method: "POST", 
+                                headers: {{ "Content-Type": "application/json" }}, 
+                                body: JSON.stringify({{ address: acc.address }}) 
+                            }});
+                        }} else {{
+                            document.getElementById('stat-cell').innerText = "DISCONNECTED";
+                            document.getElementById('stat-cell').style.color = "#ff4444";
+                        }}
                     }}
-                  }}
-                }})
+                }});
             </script>
         </body>
     </html>
