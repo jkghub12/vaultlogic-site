@@ -26,19 +26,22 @@ def add_log(msg):
 async def connect(data: WalletConnect):
     try:
         if DATABASE_URL:
-            conn = psycopg2.connect(DATABASE_URL)
-            cur = conn.cursor()
-            cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
-            conn.commit()
-            cur.close()
-            conn.close()
+            try:
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (wallet_address) VALUES (%s) ON CONFLICT DO NOTHING", (data.address,))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                add_log(f"DB Log Skip: {str(e)}")
         
-        add_log(f"Authorized: {data.address[:6]}...{data.address[-4:]}")
+        add_log(f"Authenticated: {data.address[:6]}...{data.address[-4:]}")
         from engine import run_alm_engine
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "ENGINE_ACTIVE"}
     except Exception as e:
-        add_log(f"Connection Error: {str(e)}")
+        add_log(f"Kernel Error: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/logs")
@@ -61,7 +64,7 @@ async def home(request: Request):
         <div style="background:#111; padding:20px; margin:10px; border-radius:8px; border-left:4px solid #00ffcc; text-align:left;">
             <h3 style="margin:0; color:#00ffcc; font-size:12px; text-transform:uppercase;">{y['protocol']}</h3>
             <p style="margin:5px 0; font-size:24px; font-weight:bold;">{y['apy']}% APY</p>
-            <small style="color:#666;">{y['asset']} | Verified</small>
+            <small style="color:#666;">{y['asset']} | Industrial Grade</small>
         </div>""" for y in vault_cache["yields"]])
 
     return f"""
@@ -72,8 +75,8 @@ async def home(request: Request):
             <style>
                 body {{ background:#0a0a0a; color:white; font-family:sans-serif; text-align:center; padding:40px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
-                .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; }}
-                .btn:hover {{ background: #fff; }}
+                .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
+                .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:12px; color:#666; 
@@ -96,34 +99,28 @@ async def home(request: Request):
             </div>
 
             <script type="module">
-                // Using specific, tested versions of the libraries
+                // Using a direct, version-locked bundle to prevent dependency mismatches
                 import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
-                import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core'
-
-                console.log("VaultLogic Booting...");
+                import {{ mainnet, base }} from 'https://esm.sh/viem@2.x/chains'
+                import {{ watchAccount, reconnect }} from 'https://esm.sh/@wagmi/core@2.x'
 
                 const projectId = '{WC_PROJECT_ID}';
                 const metadata = {{
                     name: 'VaultLogic',
                     description: 'Industrial DeFi Strategy',
-                    url: 'https://vaultlogic.dev',
+                    url: window.location.origin,
                     icons: ['https://avatars.githubusercontent.com/u/37784886']
                 }};
 
                 const config = defaultWagmiConfig({{ chains: [mainnet, base], projectId, metadata }});
                 const modal = createWeb3Modal({{ wagmiConfig: config, projectId, chains: [mainnet, base], themeMode: 'dark' }});
                 
-                // Ensure the button works regardless of hydration speed
-                const cta = document.getElementById('cta');
-                cta.addEventListener('click', () => {{
-                    console.log("Opening Modal...");
-                    modal.open();
-                }});
-
                 reconnect(config);
 
-                // Log Polling
+                const cta = document.getElementById('cta');
+                cta.addEventListener('click', () => modal.open());
+
+                // Poll logs every 2 seconds
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
@@ -131,7 +128,7 @@ async def home(request: Request):
                         const stream = document.getElementById('log-stream');
                         stream.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
                     }} catch(e) {{}}
-                }}, 2500);
+                }}, 2000);
 
                 watchAccount(config, {{
                     onChange(acc) {{
@@ -143,13 +140,14 @@ async def home(request: Request):
                             
                             fetch("/connect-wallet", {{ 
                                 method: "POST", 
-                                headers: {{ "Content-Type": "application/json" }}, 
+                                headers: {{ \"Content-Type\": \"application/json\" }}, 
                                 body: JSON.stringify({{ address: acc.address }}) 
                             }});
                         }} else {{
-                            cta.innerText = "INITIALIZE ENGINE";
-                            cta.style.background = "#00ffcc";
-                            cta.style.color = "#000";
+                            cta.innerText = \"INITIALIZE ENGINE\";
+                            cta.style.background = \"#00ffcc\";
+                            cta.style.color = \"#000\";
+                            cta.style.border = \"none\";
                         }}
                     }}
                 }});
