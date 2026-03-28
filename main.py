@@ -196,70 +196,82 @@ async def get_vault(request: Request):
             </div>
 
 <script type="module">
-    import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
-    import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount, reconnect, disconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
+    import { createWeb3Modal, defaultWagmiConfig } from 'https://esm.sh/@web3modal/wagmi'
+    import { mainnet, base } from 'https://esm.sh/viem/chains'
+    import { watchAccount, reconnect, disconnect, getAccount, signMessage } from 'https://esm.sh/@wagmi/core'
 
     const projectId = '{WC_PROJECT_ID}'
-    const metadata = {{
+    const metadata = {
       name: 'VaultLogic Dev LLC',
-      description: 'Industrial DeFi Strategy',
       url: 'https://vaultlogic.dev',
+      description: 'Industrial DeFi Strategy',
       icons: ['https://avatars.githubusercontent.com/u/37784886']
-    }}
+    }
 
     const chains = [base, mainnet]
-    const wagmiConfig = defaultWagmiConfig({{ 
+    const wagmiConfig = defaultWagmiConfig({ 
         chains, 
         projectId, 
-        metadata,
-        enableCoinbase: true, 
+        metadata, 
+        enableInjected: true,
+        enableCoinbase: true,
         defaultChain: base 
-    }})
+    })
 
-    const modal = createWeb3Modal({{ 
-        wagmiConfig, 
-        projectId, 
-        chains,
-        featuredWalletIds: ['fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081'] 
-    }})
+    const modal = createWeb3Modal({ wagmiConfig, projectId, chains })
 
-    // --- THE FIX: FORCE DISCONNECT STUCK SESSIONS ---
-    async function hardReset() {{
+    // --- 1. THE RESET (STOPS THE "DECLINED" ERROR) ---
+    async function safetyReset() {
         const account = getAccount(wagmiConfig);
-        // If it says "connecting" or "reconnecting" but nothing is happening, it's stuck.
-        if (account.status !== 'connected') {{
-            console.log("VaultLogic: Force-clearing previous requests...");
-            await disconnect(wagmiConfig); 
+        // If we are stuck in a "Connecting" loop, we kill it immediately.
+        if (account.status === 'connecting' || account.status === 'reconnecting') {
+            console.log("VaultLogic: Clearing pending request...");
+            await disconnect(wagmiConfig);
         }}
-    }}
 
-    // Run the reset when the user clicks the button
-    window.addEventListener('mousedown', (e) => {{
-        if (e.target.tagName === 'W3M-BUTTON') {{
-            hardReset();
+    // Trigger the reset whenever the user interacts with the button
+    window.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'W3M-BUTTON') safetyReset();
+    }, true);
+
+    // --- 2. THE SIGN-IN LOGIC (YIELDSEEKER STYLE) ---
+    async function handleAuth(address) {
+        try {
+            const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
+            // Only proceed if the dashboard is currently empty
+            if (currentEth !== "0.000 ETH") return;
+
+            // Step A: Request the Signature (Proof of Ownership)
+            await signMessage(wagmiConfig, {
+                message: `VaultLogic Security Update\\n\\nVerify Wallet: ${address}\\nSession: ${new Date().toISOString()}`
+            });
+
+            // Step B: Send to Python Backend
+            const response = await fetch('/connect-wallet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: address })
+            });
+
+            if (response.ok) {
+                // Short delay to allow the "Success" toast to show in the wallet
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        } catch (err) {
+            console.error("Auth Canceled:", err);
+            // If they cancel the signature, we disconnect so the next attempt is fresh
+            await disconnect(wagmiConfig);
         }}
-    }}, true);
 
-    // Try to recover existing session quietly
+    // --- 3. THE WATCHER ---
     reconnect(wagmiConfig);
-
-    watchAccount(wagmiConfig, {{
-      onChange(account) {{
-        if (account.isConnected && account.address) {{
-          const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
-          if (currentEth === "0.000 ETH") {{
-            fetch('/connect-wallet', {{ 
-              method: 'POST', 
-              headers: {{ 'Content-Type': 'application/json' }}, 
-              body: JSON.stringify({{ address: account.address }}) 
-            }}).then(res => {{ 
-                if(res.ok) setTimeout(() => window.location.reload(), 1500); 
-            }});
-          }}
-        }}
-      }}
-    }})
+    watchAccount(wagmiConfig, {
+      onChange(account) {
+        if (account.isConnected && account.address) {
+            handleAuth(account.address);
+        }
+      }
+    })
 </script>
         </body>
     </html>
