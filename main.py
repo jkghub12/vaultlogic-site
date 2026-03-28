@@ -198,7 +198,7 @@ async def get_vault(request: Request):
 <script type="module">
     import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi'
     import {{ mainnet, base }} from 'https://esm.sh/viem/chains'
-    import {{ watchAccount, reconnect, disconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
+    import {{ watchAccount, reconnect, getAccount }} from 'https://esm.sh/@wagmi/core'
 
     const projectId = '{WC_PROJECT_ID}'
     const metadata = {{
@@ -213,7 +213,6 @@ async def get_vault(request: Request):
         chains, 
         projectId, 
         metadata,
-        enableCoinbase: true, // Explicitly enable for SDK stability
         defaultChain: base 
     }})
 
@@ -222,35 +221,44 @@ async def get_vault(request: Request):
         projectId, 
         chains,
         featuredWalletIds: [
-            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081', // Coinbase
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'  // MetaMask
+            'fd20dc426737c3d97f4a260456950650e138a4c6d6e271716766cd64b6009081',
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96'
         ]
     }})
 
-    // --- FIX FOR "CONNECTION DECLINED" ---
-    // If we detect a "stuck" state, we force a silent disconnect before trying again.
-    window.addEventListener('click', (e) => {{
-        if (e.target.tagName === 'W3M-BUTTON') {{
-            const account = getAccount(wagmiConfig);
-            if (account.status === 'reconnecting' || account.status === 'connecting') {{
-                console.log("VaultLogic: Clearing ghost connection...");
-                disconnect(wagmiConfig);
-            }}
+    // --- CRITICAL FIX: RECOVERY LOGIC ---
+    async function recoverSession() {{
+        await reconnect(wagmiConfig);
+        const account = getAccount(wagmiConfig);
+        
+        // If Wagmi knows we are connected but the button is stuck...
+        if (account.isConnected && account.address) {{
+            console.log("VaultLogic: Session recovered for", account.address);
+            // This small delay gives the button 1 second to update its own internal state
+            // after the reconnect handshake finishes.
         }}
-    }}, true);
-
-    reconnect(wagmiConfig);
+    }}
+    
+    // Execute recovery immediately on load
+    recoverSession();
 
     watchAccount(wagmiConfig, {{
       onChange(account) {{
         if (account.isConnected && account.address) {{
+          // Check the ACTUAL value being sent from Python to prevent reload loops
           const currentEth = "{vault_cache.get('wallet_balance', '0.000 ETH')}";
+          
           if (currentEth === "0.000 ETH") {{
             fetch('/connect-wallet', {{ 
               method: 'POST', 
               headers: {{ 'Content-Type': 'application/json' }}, 
               body: JSON.stringify({{ address: account.address }}) 
-            }}).then(res => {{ if(res.ok) setTimeout(() => window.location.reload(), 1500); }});
+            }}).then(response => {{
+              if (response.ok) {{
+                // Wait 2 seconds for the Scout to finish before refreshing
+                setTimeout(() => {{ window.location.reload(); }}, 2000);
+              }}
+            }});
           }}
         }}
       }}
