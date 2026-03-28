@@ -30,11 +30,9 @@ class WalletConnect(BaseModel):
 @app.post("/connect-wallet")
 async def save_wallet(data: WalletConnect):
     try:
-        # Update cache with live data
         vault_cache["wallet_address"] = data.address
         vault_cache["wallet_balance"] = data.balance
         
-        # --- DATABASE LOGGING ---
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
             cur = conn.cursor()
@@ -43,7 +41,6 @@ async def save_wallet(data: WalletConnect):
             cur.close()
             conn.close()
 
-        # --- ENGINE TRIGGER ---
         from engine import run_alm_engine 
         asyncio.create_task(run_alm_engine(data.address))
         
@@ -51,7 +48,6 @@ async def save_wallet(data: WalletConnect):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- STRATEGY BRIEF ---
 @app.get("/strategy", response_class=HTMLResponse)
 async def get_strategy():
     return f"""
@@ -84,7 +80,6 @@ async def get_strategy():
     </html>
     """
 
-# --- COMPLIANCE AUDIT ---
 @app.get("/audit", response_class=HTMLResponse)
 async def get_audit():
     return """
@@ -139,7 +134,6 @@ async def get_vault(request: Request):
             <small style="color: #666;">Asset: {y['asset']} | Risk: Verified</small>
         </div>"""
 
-    # Format address for display
     addr = vault_cache["wallet_address"]
     display_addr = f"{addr[:6]}...{addr[-4:]}" if addr else "NOT CONNECTED"
 
@@ -208,7 +202,6 @@ async def get_vault(request: Request):
                 watchAccount(config, {{
                   async onChange(account) {{
                     if (account.isConnected) {{
-                      // Industrial fetch of Base balance
                       const balanceData = await getBalance(config, {{
                         address: account.address,
                         chainId: base.id
@@ -225,9 +218,8 @@ async def get_vault(request: Request):
                         }}) 
                       }});
                       
-                      // Reload to reflect state in vault_cache
                       window.location.reload();
-                    }
+                    }}
                   }}
                 }})
             </script>
