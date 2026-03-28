@@ -65,6 +65,7 @@ async def home(request: Request):
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1100px; margin:0 auto; }}
                 .btn {{ background:#00ffcc; color:#000; border:none; padding:15px 30px; font-weight:bold; cursor:pointer; letter-spacing:2px; transition: 0.2s; border-radius: 4px; }}
                 .btn:hover {{ background: #fff; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
+                .btn:disabled {{ background: #222; color: #444; cursor: not-allowed; }}
                 #console {{ 
                     max-width:1000px; margin:50px auto; background:#050505; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:13px; color:#00ffcc; 
@@ -72,13 +73,12 @@ async def home(request: Request):
                 }}
                 .log-entry {{ border-bottom:1px solid #111; padding:8px 0; opacity: 0.8; font-size: 11px; }}
             </style>
-            <script src="https://unpkg.com/@web3modal/standalone@2.4.3/dist/index.js"></script>
         </head>
         <body>
             <h1 style="letter-spacing:15px; margin-top:40px; margin-bottom: 5px;">VAULTLOGIC</h1>
             <p style="color:#00ffcc; font-size:11px; margin-bottom:30px; letter-spacing: 2px;">CORE ALM INTERFACE</p>
             
-            <button id="cta" class="btn">INITIALIZE ENGINE</button>
+            <button id="cta" class="btn" disabled>CONNECTING TO KERNEL...</button>
             
             <div class="container" style="margin-top:40px;">{yield_cards}</div>
 
@@ -87,53 +87,62 @@ async def home(request: Request):
                 <div id="log-stream"></div>
             </div>
 
-            <script>
-                const btn = document.getElementById('cta');
-                let web3Modal;
+            <script type="module">
+                // Using the absolute latest stable bundle to avoid local file 404s
+                import {{ createWeb3Modal, defaultWagmiConfig }} from 'https://esm.sh/@web3modal/wagmi@4.1.1?bundle'
+                import {{ mainnet, base }} from 'https://esm.sh/viem/chains?bundle'
+                import {{ reconnect, watchAccount, getAccount }} from 'https://esm.sh/@wagmi/core?bundle'
 
-                // Initialize modal with explicit asset paths to stop 404s
-                function initModal() {{
-                    if (window.Web3ModalStandalone) {{
-                        web3Modal = new window.Web3ModalStandalone.Web3Modal({{
-                            projectId: '{WC_PROJECT_ID}',
-                            walletConnectVersion: 2,
-                            themeMode: 'dark',
-                            standaloneChains: ["eip155:8453"],
-                            enableExplorer: true,
-                            // This helps the modal find its icons externally instead of on your server
-                            walletImages: {{
-                                safe: 'https://explorer-api.walletconnect.com/v3/logo/lg/20be0434-6385-44bd-9c71-2917711424e9?projectId={WC_PROJECT_ID}'
+                const projectId = '{WC_PROJECT_ID}';
+                const chains = [mainnet, base];
+                const config = defaultWagmiConfig({{ 
+                    chains, 
+                    projectId, 
+                    metadata: {{
+                        name: 'VaultLogic',
+                        description: 'Industrial ALM',
+                        url: window.location.origin,
+                        icons: ['https://avatars.githubusercontent.com/u/37784886']
+                    }}
+                }});
+
+                try {{
+                    const modal = createWeb3Modal({{ 
+                        wagmiConfig: config, 
+                        projectId, 
+                        enableAnalytics: false,
+                        themeMode: 'dark' 
+                    }});
+
+                    const btn = document.getElementById('cta');
+                    btn.innerText = "INITIALIZE ENGINE";
+                    btn.disabled = false;
+
+                    btn.onclick = async () => {{
+                        await modal.open();
+                    }};
+
+                    reconnect(config);
+
+                    watchAccount(config, {{
+                        onChange(account) {{
+                            if (account.isConnected && account.address) {{
+                                btn.innerText = "ENGINE ACTIVE";
+                                btn.disabled = true;
+                                btn.style.background = "#111";
+                                btn.style.color = "#00ffcc";
+                                
+                                fetch("/connect-wallet", {{
+                                    method: "POST",
+                                    headers: {{ "Content-Type": "application/json" }},
+                                    body: JSON.stringify({{ address: account.address }})
+                                }});
                             }}
-                        }});
-                        console.log("VaultLogic: Modal Ready");
-                    }} else {{
-                        setTimeout(initModal, 500);
-                    }}
+                        }}
+                    }});
+                }} catch (e) {{
+                    console.error("Kernel Bridge Failed", e);
                 }}
-
-                initModal();
-                
-                btn.onclick = async () => {{
-                    if (!web3Modal) return;
-                    try {{
-                        const data = await web3Modal.openModal();
-                        
-                        // Simulation of address retrieval for demo purposes
-                        const mockAddress = "0x" + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-                        
-                        btn.innerText = "ENGINE ACTIVE";
-                        btn.style.background = "#111";
-                        btn.style.color = "#00ffcc";
-                        
-                        await fetch("/connect-wallet", {{
-                            method: "POST",
-                            headers: {{ "Content-Type": "application/json" }},
-                            body: JSON.stringify({{ address: mockAddress }})
-                        }});
-                    }} catch (err) {{
-                        console.log("Modal interaction handled.");
-                    }}
-                }};
 
                 setInterval(async () => {{
                     try {{
