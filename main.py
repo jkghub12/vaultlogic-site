@@ -56,7 +56,6 @@ async def start_engine(data: EngineInit):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # This is where the fixed HTML/CSS "Gateway" UI lives, properly wrapped in a Python string.
     return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -75,7 +74,12 @@ async def home(request: Request):
             adapters: [new Ethers5Adapter()],
             networks: [base],
             projectId: '2b936cf692d84ae6da1ba91950c96420',
-            themeMode: 'dark'
+            themeMode: 'dark',
+            features: {{
+                analytics: true,
+                email: false,
+                socials: false
+            }}
         }});
         window.modal = modal;
 
@@ -84,17 +88,28 @@ async def home(request: Request):
             const connectBtn = document.getElementById('connectBtn');
             const connectionStatus = document.getElementById('connectionStatus');
             
-            if(state.isConnected) {{
+            if(state.isConnected && state.address) {{
                 window.userAddress = state.address;
                 dashboard.classList.remove('opacity-40', 'pointer-events-none');
-                connectBtn.classList.add('hidden');
+                
+                // Update Button to show "Disconnect" state or truncated address
+                connectBtn.innerText = "OPEN WALLET";
+                connectBtn.classList.remove('bg-sky-600');
+                connectBtn.classList.add('bg-slate-800');
+
                 connectionStatus.innerHTML = `
                     <span class="w-2 h-2 bg-emerald-500 rounded-full status-pulse"></span>
-                    <span class="text-sm font-medium text-emerald-400">AUTH: ${{state.address.slice(0,6)}}...${{state.address.slice(-4)}}</span>
+                    <span class="text-sm font-medium text-emerald-400 uppercase tracking-tighter">AUTH: ${{state.address.slice(0,6)}}...${{state.address.slice(-4)}}</span>
                 `;
             }} else {{
+                window.userAddress = null;
                 dashboard.classList.add('opacity-40', 'pointer-events-none');
-                connectBtn.classList.remove('hidden');
+                
+                // Reset Button
+                connectBtn.innerText = "AUTHENTICATE";
+                connectBtn.classList.remove('bg-slate-800');
+                connectBtn.classList.add('bg-sky-600');
+
                 connectionStatus.innerHTML = `
                     <span class="w-2 h-2 bg-sky-500 rounded-full status-pulse"></span>
                     <span class="text-sm font-medium text-sky-400">CONNECTING TO BASE...</span>
@@ -104,7 +119,7 @@ async def home(request: Request):
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
-        body {{ background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; }}
+        body {{ background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }}
         .mono {{ font-family: 'JetBrains Mono', monospace; }}
         .glass-panel {{ background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }}
         .kernel-glow {{ box-shadow: 0 0 20px rgba(56, 189, 248, 0.15); }}
@@ -125,7 +140,7 @@ async def home(request: Request):
                 <i class="fas fa-microchip text-black text-xl"></i>
             </div>
             <div>
-                <h1 class="text-2xl font-bold tracking-tight">VAULTLOGIC <span class="text-sky-500 text-xs align-top ml-1 mono font-normal">v2.1-AUDIT</span></h1>
+                <h1 class="text-2xl font-bold tracking-tight uppercase">VaultLogic <span class="text-sky-500 text-xs align-top ml-1 mono font-normal">v2.1-AUDIT</span></h1>
                 <p class="text-xs text-slate-500 uppercase tracking-widest">Autonomous ALM Kernel</p>
             </div>
         </div>
@@ -135,7 +150,7 @@ async def home(request: Request):
                 <span class="w-2 h-2 bg-sky-500 rounded-full status-pulse"></span>
                 <span class="text-sm font-medium text-sky-400">CONNECTING TO BASE...</span>
             </div>
-            <button onclick="window.modal.open()" id="connectBtn" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-2 rounded-lg font-semibold transition-all shadow-lg shadow-sky-900/20">
+            <button onclick="window.modal.open()" id="connectBtn" class="bg-sky-600 hover:opacity-80 text-white px-6 py-2 rounded-lg font-semibold transition-all shadow-lg shadow-sky-900/20 uppercase text-xs tracking-widest">
                 AUTHENTICATE
             </button>
         </div>
@@ -144,22 +159,22 @@ async def home(request: Request):
     <main id="dashboard" class="max-w-7xl mx-auto opacity-40 transition-opacity duration-700 pointer-events-none">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div class="glass-panel p-6 rounded-2xl">
-                <p class="text-slate-500 text-xs font-semibold mb-2 uppercase tracking-tighter">System TVL</p>
+                <p class="text-slate-500 text-[10px] font-bold mb-2 uppercase tracking-widest">System TVL</p>
                 <h2 class="text-3xl font-bold">$142.8M</h2>
                 <div class="text-emerald-400 text-[10px] mt-2 flex items-center gap-1"><i class="fas fa-chart-line"></i> +12.4% PERFORMANCE</div>
             </div>
             <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-sky-500">
-                <p class="text-slate-500 text-xs font-semibold mb-2 uppercase tracking-tighter">Target Yield (APY)</p>
+                <p class="text-slate-500 text-[10px] font-bold mb-2 uppercase tracking-widest">Target Yield (APY)</p>
                 <h2 class="text-3xl font-bold text-sky-400">5.82%</h2>
                 <p class="text-[10px] text-slate-500 mt-2 uppercase">Delta-Neutral Strategy</p>
             </div>
             <div class="glass-panel p-6 rounded-2xl">
-                <p class="text-slate-500 text-xs font-semibold mb-2 uppercase tracking-tighter">Active Nodes</p>
+                <p class="text-slate-500 text-[10px] font-bold mb-2 uppercase tracking-widest">Active Nodes</p>
                 <div class="flex items-center gap-3"><h2 class="text-3xl font-bold">12</h2><span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] rounded border border-emerald-500/20">OPERATIONAL</span></div>
                 <p class="text-[10px] text-slate-500 mt-2 uppercase tracking-tight">Distributed Execution Cluster</p>
             </div>
             <div class="glass-panel p-6 rounded-2xl">
-                <p class="text-slate-500 text-xs font-semibold mb-2 uppercase tracking-tighter">Kernel Health</p>
+                <p class="text-slate-500 text-[10px] font-bold mb-2 uppercase tracking-widest">Kernel Health</p>
                 <h2 class="text-3xl font-bold text-emerald-400" id="kernelHealth">99.8%</h2>
                 <div class="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
                     <div class="bg-emerald-500 h-full w-[99.8%] transition-all duration-1000" id="healthBar"></div>
@@ -188,7 +203,11 @@ async def home(request: Request):
             </div>
 
             <div class="lg:col-span-2">
-                <div class="glass-panel rounded-3xl p-6 min-h-[620px] flex flex-col">
+                <div class="glass-panel rounded-3xl p-6 min-h-[620px] flex flex-col bg-slate-900/20 border border-white/5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-2 h-2 bg-sky-500 rounded-full status-pulse"></div>
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Live Execution Audit</span>
+                    </div>
                     <div id="logOutput" class="flex-grow mono text-[11px] space-y-3 overflow-y-auto max-h-[480px] pr-2 custom-scrollbar"></div>
                 </div>
             </div>
@@ -197,12 +216,15 @@ async def home(request: Request):
 
     <script>
         async function verifyAndStart() {{
+            if (!window.userAddress) return;
+            
             const amt = document.getElementById('alloc-amt').value;
             const btn = document.getElementById('verify-btn');
             const err = document.getElementById('err-box');
             
             err.classList.add('hidden');
             btn.innerText = "AUDITING...";
+            btn.disabled = true;
             
             try {{
                 const vRes = await fetch('/verify-balance', {{
@@ -211,29 +233,42 @@ async def home(request: Request):
                     body: JSON.stringify({{ address: window.userAddress, amount: parseFloat(amt) }})
                 }});
                 const vData = await vRes.json();
+                
                 if(vData.status === 'error') {{
                     err.innerText = vData.message;
                     err.classList.remove('hidden');
                     btn.innerText = "CONFIRM ALLOCATION";
+                    btn.disabled = false;
                     return;
                 }}
+                
                 await fetch('/start-engine', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{ address: window.userAddress, amount: parseFloat(amt) }})
                 }});
+                
                 btn.innerText = "ALLOCATION ACTIVE";
+                btn.classList.add('bg-emerald-500', 'text-white');
             }} catch(e) {{
                 btn.innerText = "CONFIRM ALLOCATION";
+                btn.disabled = false;
             }}
         }}
 
         setInterval(async () => {{
-            const res = await fetch('/logs');
-            const data = await res.json();
-            const logOutput = document.getElementById('logOutput');
-            logOutput.innerHTML = data.logs.map(l => `<div class="log-entry p-3 rounded bg-slate-900/30"><span class="text-slate-500">[SYSTEM]</span> ${{l}}</div>`).reverse().join('');
-        }}, 2000);
+            try {{
+                const res = await fetch('/logs');
+                const data = await res.json();
+                const logOutput = document.getElementById('logOutput');
+                logOutput.innerHTML = data.logs.map(l => `
+                    <div class="log-entry p-3 rounded bg-slate-900/40 border border-white/5">
+                        <span class="text-slate-500 font-bold">[SYS]</span> 
+                        <span class="text-slate-300">${{l}}</span>
+                    </div>
+                `).reverse().join('');
+            }} catch(e) {{}}
+        }}, 3000);
     </script>
 </body>
 </html>
