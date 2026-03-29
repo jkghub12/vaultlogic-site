@@ -138,7 +138,7 @@ async def home(request: Request):
                     <a href="#about">About</a>
                     <a href="#strategies">Strategies</a>
                     <a href="#tax-center">Compliance</a>
-                    <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800;">Institutional Login</a>
+                    <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800; cursor:pointer;">Institutional Login</a>
                     <button id="connectBtn" class="connect-btn" style="margin-left:25px;" onclick="connectWallet()">Connect Wallet</button>
                     <div id="walletDisplay" style="display:none; margin-left:25px; align-items:center;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; margin-right:15px; font-size:12px; color:#64748b;"></span>
@@ -155,8 +155,8 @@ async def home(request: Request):
             </div>
 
             <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0; text-align: left;">
-                <h2 style="font-size: 32px; font-weight: 800;">Our Mission</h2>
-                <p style="font-size: 18px; color: #64748b;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
+                <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Our Mission</h2>
+                <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
             </section>
 
             <div class="filter-bar">
@@ -231,24 +231,38 @@ async def home(request: Request):
                 function unlockPrompt() {{
                     const key = prompt("Institutional Access Key:");
                     if(key === "cb-institutional") {{
-                        alert("Access Granted. Loading Private Pitch...");
-                        document.body.innerHTML += `
-                            <div id="pitchOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); color:white; z-index:9999; padding:100px; overflow-y:auto; text-align:left;">
-                                <button onclick="document.getElementById('pitchOverlay').remove()" style="position:absolute; right:50px; top:50px; color:white; background:none; border:1px solid white; padding:10px; cursor:pointer;">Close</button>
-                                <h1 style="color:#2563eb;">VaultLogic Industrial ALM Pitch</h1>
-                                <h2>Target: Coinbase Asset Management</h2>
-                                <p style="font-size:20px; opacity:0.8;">The "Autopilot" for institutional treasuries.</p>
-                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:40px; margin-top:40px;">
+                        // Inject the CB Pitch Overlay
+                        const overlay = document.createElement('div');
+                        overlay.id = "pitchOverlay";
+                        overlay.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.98); color:white; z-index:9999; padding:80px 40px; overflow-y:auto; text-align:left;";
+                        overlay.innerHTML = `
+                            <div style="max-width: 900px; margin: auto;">
+                                <button onclick="document.getElementById('pitchOverlay').remove()" style="float:right; color:white; background:none; border:1px solid rgba(255,255,255,0.3); padding:8px 20px; cursor:pointer; border-radius:8px;">Close</button>
+                                <h1 style="color:#3b82f6; font-size: 42px; margin-bottom: 10px;">VaultLogic Industrial ALM</h1>
+                                <p style="font-size: 20px; opacity: 0.7; margin-bottom: 40px;">Private Institutional Briefing</p>
+                                
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:60px;">
                                     <div>
-                                        <h3>Dynamic Tick Management</h3>
-                                        <p>Automated liquidity re-centering for Uniswap V3 based on volatility corridors.</p>
+                                        <h3 style="color:#3b82f6;">Dynamic Tick Management</h3>
+                                        <p style="line-height:1.6; opacity: 0.9;">Automatically moves Uniswap V3 liquidity to stay "In-Range" based on real-time price volatility corridors.</p>
+                                        
+                                        <h3 style="color:#3b82f6; margin-top:30px;">Multi-Protocol Aggregation</h3>
+                                        <p style="line-height:1.6; opacity: 0.9;">Monitors Aave, Aerodrome, and Morpho simultaneously to maintain an industrial-grade yield floor.</p>
                                     </div>
-                                    <div>
-                                        <h3>Principal Protection</h3>
-                                        <p>Real-time hedging using integrated options markets to floor downside risk.</p>
+                                    <div style="background: rgba(255,255,255,0.05); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                                        <h4 style="margin-top:0;">Target: Coinbase Asset Management</h4>
+                                        <p style="font-size: 14px; opacity: 0.8;">VaultLogic acts as the "autopilot" for institutional treasuries, managing risk and capital efficiency without manual 24/7 monitoring.</p>
+                                        <ul style="font-size:14px; padding-left:20px; opacity:0.8;">
+                                            <li>Principal Protection Layer (PPL)</li>
+                                            <li>1099-DA Fiscal Compliance Export</li>
+                                            <li>Non-Custodial Architecture</li>
+                                        </ul>
                                     </div>
                                 </div>
                             </div>`;
+                        document.body.appendChild(overlay);
+                    }} else {{
+                        alert("Access Denied.");
                     }}
                 }}
 
