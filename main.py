@@ -8,7 +8,7 @@ app = FastAPI()
 
 # System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.5.9 Online", "Status: AI Predictive Engine Engaged.", "Log: Neural pathing active for USDC pairs."]
+system_logs = ["VaultLogic Kernel v2.5.9 Online", "Status: AI Predictive Engine Engaged.", "Log: Neural pathing active for Multi-Currency pairs."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -19,13 +19,13 @@ def add_log(msg):
     if len(system_logs) > 50: system_logs.pop(0)
 
 async def get_industrial_yields():
-    # Adding 'predicted' field for the AI Shadowy feature
+    # Expanding the customer base by offering Global Digital Currencies (EURC, PYUSD)
     return [
-        {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "STEAK / GT USDCP", "type": "ORGANIC"},
-        {"protocol": "AAVE V3", "apy": 2.87, "predicted": 2.91, "asset": "USDC", "type": "ORGANIC"},
-        {"protocol": "AERODROME", "apy": 12.41, "predicted": 11.15, "asset": "cbBTC/WETH", "type": "BOOSTED"},
-        {"protocol": "UNISWAP V3", "apy": 3.55, "predicted": 4.10, "asset": "USDC/ETH", "type": "CONCENTRATED"},
-        {"protocol": "BEEFY", "apy": 8.15, "predicted": 8.02, "asset": "WETH/USDC LP", "type": "AUTO-COMPOUND"}
+        {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "USDC", "type": "STABLE", "currency": "USD"},
+        {"protocol": "AAVE V3", "apy": 4.12, "predicted": 4.25, "asset": "EURC", "type": "GLOBAL", "currency": "EUR"},
+        {"protocol": "AERODROME", "apy": 12.41, "predicted": 11.15, "asset": "PYUSD/USDC", "type": "BOOSTED", "currency": "USD"},
+        {"protocol": "UNISWAP V3", "apy": 3.55, "predicted": 4.10, "asset": "USDC/EURC", "type": "FOREX", "currency": "MULTI"},
+        {"protocol": "BEEFY", "apy": 8.15, "predicted": 8.02, "asset": "EURC/USDC LP", "type": "AUTO-COMPOUND", "currency": "EUR"}
     ]
 
 @app.post("/connect-wallet")
@@ -65,20 +65,22 @@ async def startup():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     yield_cards = "".join([f"""
-        <div class="strategy-card">
+        <div class="strategy-card" data-currency="{y['currency']}">
             <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
                 <h3 style="margin:0; color:#1a2b4b; font-size:14px; font-weight:700;">{y['protocol']}</h3>
-                <span style="font-size:10px; color:#64748b; background:#f1f5f9; padding:4px 8px; border-radius:20px; font-weight:600;">{y['type']}</span>
+                <span style="font-size:10px; color:#2563eb; background:#eff6ff; padding:4px 8px; border-radius:20px; font-weight:600;">{y['type']}</span>
             </div>
             <div class="yield-display">
-                <p style="margin:5px 0; font-size:32px; font-weight:800; color:#0f172a;">{y['apy']}% <span style="font-size:14px; color:#94a3b8; font-weight:400;">APR</span></p>
+                <div class="current-apy">
+                    <p style="margin:5px 0; font-size:32px; font-weight:800; color:#0f172a;">{y['apy']}% <span style="font-size:14px; color:#94a3b8; font-weight:400;">APR</span></p>
+                </div>
                 <div class="ai-shadow">
-                    <span style="font-size:10px; letter-spacing:1px; color:#2563eb; font-weight:bold;">AI PREDICTION (24H):</span>
-                    <span style="font-size:18px; font-weight:700; color:#1e293b; display:block;">{y['predicted']}%</span>
+                    <span style="font-size:10px; letter-spacing:1px; color:#2563eb; font-weight:bold;">AI FORECAST (24H):</span>
+                    <span style="font-size:22px; font-weight:700; color:#1e293b; display:block;">{y['predicted']}%</span>
                 </div>
             </div>
             <div style="margin-bottom:20px;">
-                <small style="color:#64748b; font-size:12px;">Asset: {y['asset']}</small>
+                <small style="color:#64748b; font-size:12px;">Asset: <strong>{y['asset']}</strong></small>
             </div>
             <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn">
                 Deploy Liquidity
@@ -88,163 +90,131 @@ async def home(request: Request):
     return f"""
     <html>
         <head>
-            <title>VaultLogic | Industrial ALM</title>
+            <title>VaultLogic | Global ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
                 body {{ background:#f8fafc; color:#1e293b; font-family: 'Inter', sans-serif; text-align:center; padding:0; margin:0; line-height:1.6; scroll-behavior: smooth; }}
+                
                 .top-nav {{ background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
-                .logo-container {{ display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }}
-                .logo-img {{ height: 32px; width: auto; border-radius: 4px; }}
-                .logo-text {{ font-weight: 800; letter-spacing: 2px; color: #0f172a; font-size: 18px; }}
+                .logo-container {{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }}
+                
+                /* Logo with Fallback */
+                .logo-icon {{ width: 32px; height: 32px; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; }}
+                .logo-img {{ height: 36px; width: auto; border-radius: 4px; display: block; }}
+                
+                .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
                 .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
-                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1200px; margin:40px auto; gap:20px; padding: 0 20px; }}
-                .hero-section {{ padding: 80px 20px; background: white; border-bottom: 1px solid #e2e8f0; position: relative; overflow: hidden; }}
-                .hero-section::after {{ content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.03) 0%, transparent 70%); pointer-events: none; }}
-                .info-section {{ max-width: 900px; margin: 60px auto; text-align: left; padding: 0 20px; }}
-                .card-header {{ font-weight: 800; color: #0f172a; margin-bottom: 20px; font-size: 24px; }}
-                .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 25px; font-weight:600; cursor:pointer; border-radius: 8px; font-size:13px; transition: all 0.2s; }}
-                .connect-btn:hover {{ background: #2563eb; transform: translateY(-1px); }}
-                .stop-btn {{ background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:8px 16px; font-size:11px; cursor:pointer; border-radius:6px; font-weight:600; }}
-                .download-link {{ color:#2563eb; text-decoration:none; font-size:11px; font-weight:600; padding:8px 12px; border-radius:6px; background:#eff6ff; border:none; cursor:pointer; }}
+                
+                .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; position: relative; overflow: hidden; }}
+                .hero-section::after {{ content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.04) 0%, transparent 70%); pointer-events: none; }}
                 
                 /* Strategy Cards & AI Shadow */
-                .strategy-card {{ background:#fff; padding:25px; border-radius:12px; border:1px solid #e0e6ed; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align:left; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: default; overflow: hidden; }}
-                .strategy-card:hover {{ transform: translateY(-5px); border-color: #2563eb; box-shadow: 0 12px 20px rgba(37, 99, 235, 0.1); }}
-                .yield-display {{ position: relative; height: 60px; }}
-                .ai-shadow {{ position: absolute; top: 0; left: 0; right: 0; background: white; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }}
-                .strategy-card:hover .ai-shadow {{ opacity: 1; transform: translateY(0); }}
-                .deploy-btn {{ width:100%; background:#2563eb; color:#fff; border:none; padding:12px; font-weight:600; font-size:12px; cursor:pointer; border-radius:8px; }}
+                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
+                .strategy-card {{ background:#fff; padding:30px; border-radius:16px; border:1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:left; position: relative; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: default; overflow: hidden; }}
+                .strategy-card:hover {{ transform: translateY(-8px); border-color: #2563eb; box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.1); }}
+                
+                .yield-display {{ position: relative; height: 75px; display: flex; align-items: center; }}
+                .current-apy {{ transition: all 0.3s ease; width: 100%; }}
+                .ai-shadow {{ position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: white; opacity: 0; transform: translateY(20px) scale(0.95); transition: all 0.4s ease; display: flex; flex-direction: column; justify-content: center; pointer-events: none; filter: blur(4px); }}
+                
+                .strategy-card:hover .current-apy {{ opacity: 0.1; filter: blur(8px); transform: scale(0.9); }}
+                .strategy-card:hover .ai-shadow {{ opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }}
+                
+                .deploy-btn {{ width:100%; background:#2563eb; color:#fff; border:none; padding:14px; font-weight:700; font-size:13px; cursor:pointer; border-radius:10px; transition: background 0.2s; }}
+                .deploy-btn:hover {{ background: #1d4ed8; }}
 
-                #console {{ max-width:1160px; margin:40px auto; background:#fff; border:1px solid #e2e8f0; padding:0; text-align:left; border-radius:12px; overflow:hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }}
-                .console-header {{ background: #0f172a; padding: 15px 25px; border-bottom: 1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; }}
-                #log-stream {{ padding: 20px; height: 250px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #94a3b8; background: #0f172a; }}
-                .log-entry {{ padding: 4px 0; border-bottom: 1px solid #1e293b; }}
-                .status-badge {{ font-size:11px; color:#2563eb; background:#eff6ff; padding:4px 12px; border-radius:20px; margin-bottom:10px; display:inline-block; font-weight: 700; border: 1px solid #dbeafe; }}
-                #walletDisplay {{ display:none; }}
-                .blog-card {{ background: #fff; border: 1px solid #e2e8f0; padding: 30px; border-radius: 12px; margin-bottom: 30px; }}
-                .tax-badge {{ background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }}
+                .filter-bar {{ max-width: 1200px; margin: 30px auto 10px; padding: 0 20px; display: flex; gap: 12px; justify-content: center; }}
+                .filter-pill {{ padding: 8px 20px; border-radius: 25px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: white; color: #64748b; transition: all 0.2s; }}
+                .filter-pill.active {{ background: #0f172a; color: white; border-color: #0f172a; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+
+                #console {{ max-width:1160px; margin:40px auto; background:#0f172a; border:1px solid #1e293b; border-radius:16px; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }}
+                .console-header {{ background: #1e293b; padding: 18px 25px; display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #334155; }}
+                #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; scrollbar-width: thin; scrollbar-color: #334155 #0f172a; }}
+                .log-entry {{ padding: 6px 0; border-bottom: 1px solid #1e293b; line-height: 1.5; }}
+                
+                .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; transition: all 0.2s; }}
+                .connect-btn:hover {{ background: #2563eb; transform: translateY(-1px); }}
+                
+                .status-badge {{ font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800; border: 1px solid #dbeafe; text-transform: uppercase; letter-spacing: 0.5px; }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo-container">
-                    <img src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" onerror="this.style.display='none'" class="logo-img" alt="VL">
+                    <img src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" onerror="this.style.display='none'; this.previousElementSibling.style.display='flex'" class="logo-img" alt="VL">
+                    <div class="logo-icon" style="display:none;">VL</div>
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
                     <a href="#strategies">Strategies</a>
-                    <a href="#tax-center">Tax Center</a>
-                    <a href="#about">About</a>
-                    <a onclick="unlockPrompt()" style="color:#2563eb;">Private Access</a>
-                    <button id="connectBtn" class="connect-btn" style="margin-left:20px;" onclick="connectWallet()">Connect Wallet</button>
-                    <div id="walletDisplay" style="margin-left:20px;">
-                        <span id="addrText" style="font-family:'JetBrains Mono'; margin-right:15px; font-size:12px; color:#64748b;"></span>
-                        <button class="stop-btn" onclick="disconnectWallet()">Stop Engine</button>
+                    <a href="#tax-center">Compliance</a>
+                    <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800;">Institutional Login</a>
+                    <button id="connectBtn" class="connect-btn" style="margin-left:25px;" onclick="connectWallet()">Connect Wallet</button>
+                    <div id="walletDisplay" style="display:none; margin-left:25px; align-items:center;">
+                        <span id="addrText" style="font-family:'JetBrains Mono'; margin-right:15px; font-size:12px; color:#64748b; background:#f1f5f9; padding:6px 12px; border-radius:6px;"></span>
+                        <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:8px 16px; font-size:11px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Disconnect</button>
                     </div>
                 </div>
             </nav>
 
             <div class="hero-section">
-                <div class="status-badge">Kernel v2.5.9 • Neural Forecasting Engaged</div>
-                <h1 style="font-size:52px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-2px;">Smart Yield.<br>Audited Logic.</h1>
-                <p style="color:#64748b; max-width:600px; margin:20px auto 40px; font-size:18px;">Autonomous liquidity management with industrial precision. Experience the "Shadow AI" yield forecasting below.</p>
+                <div class="status-badge">Kernel v2.5.9 • Industrial ALM</div>
+                <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
+                <p style="color:#64748b; max-width:650px; margin:25px auto 45px; font-size:19px; font-weight:500;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability and regulatory compliance.</p>
                 <div style="display:flex; justify-content:center; gap:15px;">
-                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">View Active Alpha</button>
-                    <button onclick="unlockPrompt()" style="background:#fff; color:#1e293b; border:1px solid #e2e8f0;" class="connect-btn">Partnership Deck</button>
+                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
+                    <button onclick="window.open('https://github.com/VaultLogic/VaultLogic', '_blank')" style="background:#fff; color:#0f172a; border:1px solid #e2e8f0;" class="connect-btn">View Source</button>
                 </div>
+            </div>
+
+            <div class="filter-bar">
+                <div class="filter-pill active" onclick="filterVaults('ALL', this)">All Opportunities</div>
+                <div class="filter-pill" onclick="filterVaults('USD', this)">Digital USD</div>
+                <div class="filter-pill" onclick="filterVaults('EUR', this)">Digital Euro</div>
             </div>
             
             <div id="strategies" class="container">{yield_cards}</div>
 
             <div id="console">
                 <div class="console-header">
-                    <span style="font-weight:700; font-size:12px; color:#fff; letter-spacing:1px; text-transform:uppercase;">Kernel Strategy Audit</span>
-                    <div style="display:flex; gap:10px;">
-                        <button onclick="toggleReport()" class="download-link" style="background:#1e293b; color:#fff;">AUDIT REPORT</button>
-                        <a href="/download-logs" class="download-link" style="background:#1e293b; color:#fff;">EXPORT CSV</a>
+                    <span style="font-weight:800; font-size:11px; color:#94a3b8; letter-spacing:2px; text-transform:uppercase;">Strategy Audit Stream</span>
+                    <div style="display:flex; gap:12px;">
+                        <button onclick="alert('Exporting Audit Log...')" style="cursor:pointer; background:#334155; border:none; color:white; font-size:10px; font-weight:800; padding:6px 12px; border-radius:4px; text-transform:uppercase;">Download CSV</button>
                     </div>
                 </div>
                 <div id="log-stream"></div>
             </div>
 
-            <section id="tax-center" class="info-section">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h2 class="card-header">Institutional Accounting</h2>
-                    <span class="tax-badge">Compliance Module 1099-DA</span>
-                </div>
-                <div class="blog-card" style="border-top: 4px solid #f59e0b; box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.05);">
-                    <p style="color: #475569; font-size: 14px; margin-bottom: 25px;">The VaultLogic engine automates your fiscal reporting by aggregating every rebalance and yield claim into a structured statement.</p>
-                    <div id="taxDisplay" style="background:#f8fafc; padding:30px; border-radius:12px; border:1px solid #e2e8f0; text-align:center;">
-                        <p id="taxPrompt" style="color:#94a3b8; font-size:13px; font-style:italic;">Authorization required via Wallet Connect...</p>
-                        <div id="taxData" style="display:none; text-align:left;">
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">
-                                <div>
-                                    <small style="color:#64748b; text-transform:uppercase; font-size:10px; font-weight:bold; letter-spacing:1px;">Est. Ordinary Income</small>
-                                    <p id="estIncome" style="font-size:28px; font-weight:800; margin:8px 0; color:#059669;">$0.00</p>
-                                </div>
-                                <div>
-                                    <small style="color:#64748b; text-transform:uppercase; font-size:10px; font-weight:bold; letter-spacing:1px;">Capital Gains</small>
-                                    <p id="estGains" style="font-size:28px; font-weight:800; margin:8px 0; color:#1e293b;">$0.00</p>
-                                </div>
-                            </div>
-                            <button onclick="alert('Compiling Fiscal Report...')" style="margin-top:25px; width:100%; padding:14px; background:#0f172a; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px;">Generate Tax Pack (PDF)</button>
+            <section id="tax-center" class="info-section" style="margin-bottom:100px;">
+                <h2 class="card-header">Institutional Compliance</h2>
+                <div style="background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; border-top: 6px solid #2563eb; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);">
+                    <div style="display:flex; gap:40px; align-items:center;">
+                        <div style="flex:1;">
+                            <h3 style="margin-top:0;">1099-DA Automated Reporting</h3>
+                            <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export. VaultLogic bridges the gap between DeFi complexity and corporate accounting standards.</p>
+                        </div>
+                        <div id="taxDisplay" style="width:300px; background:#f8fafc; padding:30px; border-radius:16px; border:1px solid #e2e8f0; text-align:center;">
+                            <p id="taxPrompt" style="color:#94a3b8; font-size:13px; font-style:italic; margin:0;">Awaiting Wallet Sync...</p>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section id="coinbase-blog" class="info-section">
-                <h2 class="card-header">Private Strategy Insights</h2>
-                <div id="privateOverlay" style="background: #0f172a; color:white; padding: 60px; text-align: center; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
-                    <div style="font-size: 40px; margin-bottom:10px;">🛡️</div>
-                    <h3 style="margin:0 0 10px 0; font-weight: 800;">Secure Portal</h3>
-                    <p style="font-weight: 400; color: #94a3b8; margin-bottom: 30px; font-size:14px;">Authorized access only for Coinbase Partners.</p>
-                    <input type="password" id="accessKey" style="padding: 12px; border: 1px solid #334155; background:#1e293b; color:white; border-radius: 8px; width: 220px; margin-bottom: 15px; text-align:center;" placeholder="Entry Code"><br>
-                    <button onclick="checkKey()" class="connect-btn" style="background:#2563eb;">Unlock Portal</button>
-                </div>
-                <div id="privateContent" style="display:none;">
-                    <div class="blog-card" style="border-left: 4px solid #2563eb;">
-                        <h3 style="margin-top:0; color:#2563eb;">Institutional Roadmap v3.0</h3>
-                        <p>Our integration with Coinbase Prime enables "Zero-Gas" rebalancing for managed treasuries over $10M.</p>
-                    </div>
-                </div>
-            </section>
-
-            <div id="reportModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; padding:50px; backdrop-filter: blur(4px);">
-                <div style="background:white; max-width:800px; margin:0 auto; padding:40px; border-radius:16px; max-height:80vh; overflow-y:auto; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:25px; border-bottom: 1px solid #f1f5f9; padding-bottom:15px;">
-                        <h2 style="margin:0; font-weight:800;">Audit Intelligence Report</h2>
-                        <button onclick="toggleReport()" style="cursor:pointer; background:none; border:none; font-size:24px;">&times;</button>
-                    </div>
-                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                        <tbody id="reportTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-
             <script>
-                const SECRET_KEY = "cb-institutional";
                 let activeAddress = null;
 
-                function checkKey() {{
-                    if (document.getElementById('accessKey').value === SECRET_KEY) {{
-                        document.getElementById('privateOverlay').style.display = 'none';
-                        document.getElementById('privateContent').style.display = 'block';
-                    }} else {{ alert("Authorization Failure."); }}
-                }}
-
-                function unlockPrompt() {{ document.getElementById('coinbase-blog').scrollIntoView(); }}
-                function toggleReport() {{
-                    const modal = document.getElementById('reportModal');
-                    modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
-                    if(modal.style.display === 'block') refreshReport();
-                }}
-                async function refreshReport() {{
-                    const res = await fetch('/logs');
-                    const data = await res.json();
-                    document.getElementById('reportTableBody').innerHTML = data.logs.map(l => `<tr style="border-bottom:1px solid #f8fafc;"><td style="padding:12px; font-family:'JetBrains Mono';">${{l}}</td></tr>`).reverse().join('');
+                function filterVaults(currency, el) {{
+                    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+                    el.classList.add('active');
+                    document.querySelectorAll('.strategy-card').forEach(card => {{
+                        if (currency === 'ALL' || card.dataset.currency === currency || card.dataset.currency === 'MULTI') {{
+                            card.style.display = 'block';
+                        }} else {{
+                            card.style.display = 'none';
+                        }}
+                    }});
                 }}
 
                 async function connectWallet() {{
@@ -254,11 +224,8 @@ async def home(request: Request):
                             activeAddress = accounts[0];
                             document.getElementById('connectBtn').style.display = 'none';
                             document.getElementById('walletDisplay').style.display = 'flex';
-                            document.getElementById('walletDisplay').style.alignItems = 'center';
                             document.getElementById('addrText').innerText = activeAddress.substring(0,6) + "..." + activeAddress.substring(38);
-                            document.getElementById('taxPrompt').style.display = 'none';
-                            document.getElementById('taxData').style.display = 'block';
-                            document.getElementById('estIncome').innerText = "$" + (Math.random() * 50 + 10).toFixed(2);
+                            document.getElementById('taxPrompt').innerHTML = "<b>Compliance Ready</b><br><small style='color:#059669'>Tax Year 2026 Active</small>";
                             
                             await fetch("/connect-wallet", {{
                                 method: "POST",
@@ -269,36 +236,29 @@ async def home(request: Request):
                     }}
                 }}
 
-                async function disconnectWallet() {{
-                    activeAddress = null;
-                    document.getElementById('walletDisplay').style.display = 'none';
-                    document.getElementById('connectBtn').style.display = 'inline-block';
-                    document.getElementById('taxPrompt').style.display = 'block';
-                    document.getElementById('taxData').style.display = 'none';
-                    await fetch("/connect-wallet", {{
-                        method: "POST",
-                        headers: {{ "Content-Type": "application/json" }},
-                        body: JSON.stringify({{ address: "DISCONNECT" }})
-                    }});
+                async function deployFunds(btn, protocol) {{
+                    if (!activeAddress) {{ alert("Wallet connection required for industrial deployment."); return; }}
+                    btn.innerText = "Securing Path...";
+                    btn.style.background = "#0f172a";
+                    setTimeout(() => {{ 
+                        btn.innerText = "Active & Protected"; 
+                        btn.style.background = "#059669"; 
+                    }}, 1500);
                 }}
 
-                async function deployFunds(btn, protocol) {{
-                    if (!activeAddress) {{ alert("Wallet connection required."); return; }}
-                    btn.innerText = "Securing...";
-                    btn.style.background = "#1e293b";
-                    await fetch("/connect-wallet", {{
-                        method: "POST",
-                        headers: {{ "Content-Type": "application/json" }},
-                        body: JSON.stringify({{ address: "0x_INJECTION_" + protocol.replace(/ /g, "_") }})
-                    }});
-                    setTimeout(() => {{ btn.innerText = "Active"; btn.style.background = "#059669"; }}, 1500);
+                function unlockPrompt() {{
+                    const key = prompt("Institutional Access Key:");
+                    if(key === "cb-institutional") {{
+                        alert("Access Granted. Corporate Dashboard Unlocked.");
+                    }}
                 }}
 
                 setInterval(async () => {{
                     try {{
                         const res = await fetch('/logs');
                         const data = await res.json();
-                        document.getElementById('log-stream').innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).reverse().join('');
+                        const stream = document.getElementById('log-stream');
+                        stream.innerHTML = data.logs.map(l => `<div class="log-entry"><span style="color:#2563eb; margin-right:10px;">></span> ${{l}}</div>`).reverse().join('');
                     }} catch(e) {{}}
                 }}, 3000);
             </script>
