@@ -112,7 +112,6 @@ async def home(request: Request):
 
                 window.modal = modal;
 
-                // Sync connection status with our backend
                 modal.subscribeAccount(state => {{
                     if (state.isConnected && state.address) {{
                         setupWalletUI(state.address);
@@ -128,7 +127,9 @@ async def home(request: Request):
                 .logo-img {{ height: 36px; width: auto; border-radius: 4px; }}
                 .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
                 
-                .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
+                .nav-links {{ display: flex; align-items: center; gap: 20px; }}
+                .nav-links a {{ text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; transition: color 0.2s; }}
+                .nav-links a:hover {{ color: #2563eb; }}
                 
                 .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
@@ -149,18 +150,16 @@ async def home(request: Request):
                 #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; text-align: left; }}
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
-                .initiate-btn {{ background:#2563eb; border:none; color:white; padding:15px 40px; border-radius:10px; font-weight:800; font-size:16px; cursor:pointer; margin-top: 20px; transition: transform 0.2s; }}
+                .inst-btn {{ background:transparent; border:1px solid #e2e8f0; color:#0f172a; padding:12px 20px; border-radius:10px; font-weight:700; cursor:pointer; font-size:14px; }}
                 
-                #aboutModal {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:2000; justify-content:center; align-items:center; }}
-                .modal-content {{ max-width: 800px; text-align: left; padding: 40px; }}
+                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:2000; justify-content:center; align-items:center; }}
+                .modal-content {{ max-width: 800px; text-align: left; padding: 40px; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }}
 
                 @media (max-width: 768px) {{
                     .top-nav {{ padding: 15px 20px; flex-direction: column; gap: 15px; }}
                     .nav-links {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }}
-                    .nav-links a {{ margin-left: 0; padding: 5px 10px; font-weight: 400; color: #94a3b8; font-size: 12px; }}
+                    .nav-links a {{ margin-left: 0; padding: 5px 10px; }}
                     .logo-text {{ font-size: 16px; }}
-                    .hero-section h1 {{ font-size: 38px; }}
-                    .initiate-btn {{ width: 100%; }}
                 }}
             </style>
         </head>
@@ -171,9 +170,10 @@ async def home(request: Request):
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
-                    <a onclick="toggleAbout(true)">About</a>
+                    <a onclick="toggleModal('aboutModal', true)">About</a>
                     <a href="#strategies">Strategies</a>
-                    <a href="#tax-center">Compliance</a>
+                    <a onclick="toggleModal('complianceModal', true)">Compliance</a>
+                    <button class="inst-btn" onclick="toggleModal('loginModal', true)">Institutional Login</button>
                     <button id="connectBtn" class="connect-btn" onclick="window.modal.open()">Connect Wallet</button>
                     <div id="walletDisplay" style="display:none; align-items:center; flex-direction:column; gap:5px;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b;"></span>
@@ -182,22 +182,43 @@ async def home(request: Request):
                 </div>
             </nav>
 
-            <div id="aboutModal">
+            <!-- MODALS -->
+            <div id="aboutModal" class="modal-overlay">
                 <div class="modal-content">
-                    <button onclick="toggleAbout(false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
-                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Our Mission</h2>
-                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">Industrial Asset-Liability Management on Base. Built for Institutional Stability.</p>
+                    <button onclick="toggleModal('aboutModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
+                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Industrial Trust</h2>
+                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides automated Asset-Liability Management (ALM) for institutional treasuries. We prioritize principal protection and predictable yield over high-risk speculation.</p>
+                </div>
+            </div>
+
+            <div id="complianceModal" class="modal-overlay">
+                <div class="modal-content">
+                    <button onclick="toggleModal('complianceModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
+                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Compliance Center</h2>
+                    <p style="color: #64748b;">Download your audit logs and tax reports below.</p>
+                    <div style="margin-top: 20px; display:flex; gap:10px;">
+                        <button onclick="location.href='/download-logs'" style="background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; cursor:pointer;">Download Audit CSV</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loginModal" class="modal-overlay">
+                <div class="modal-content" style="width: 400px; text-align:center;">
+                    <button onclick="toggleModal('loginModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
+                    <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top:40px;">Institutional Access</h2>
+                    <input type="password" placeholder="Enter System Key" style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:10px; margin: 20px 0;">
+                    <button onclick="alert('Demo Mode: Please connect wallet instead.')" style="width:100%; background:#2563eb; color:white; padding:15px; border:none; border-radius:10px; font-weight:700; cursor:pointer;">Authenticate</button>
                 </div>
             </div>
 
             <div class="hero-section">
-                <h1 style="font-weight:800; color:#0f172a; margin:10px 0; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
-                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:17px; padding: 0 10px;">Sophisticated yield management for USDC and EURC.</p>
-                <button onclick="initiateEngine(this)" class="initiate-btn">Initiate Engine</button>
+                <h1 style="font-weight:800; color:#0f172a; margin:10px 0; line-height:1.1; font-size:56px;">Global Treasury.<br>Automated Alpha.</h1>
+                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:17px; padding: 0 10px;">Sophisticated yield management for digital assets. Built for longevity.</p>
+                <button onclick="window.modal.open()" class="initiate-btn" style="background:#2563eb; color:white; padding:18px 45px; border:none; border-radius:12px; font-weight:800; font-size:18px; cursor:pointer;">Initiate Engine</button>
             </div>
 
             <div class="filter-bar">
-                <div class="filter-pill active" onclick="filterVaults('ALL', this)">All</div>
+                <div class="filter-pill active" onclick="filterVaults('ALL', this)">All Strategies</div>
                 <div class="filter-pill" onclick="filterVaults('USD', this)">Digital USD</div>
                 <div class="filter-pill" onclick="filterVaults('EUR', this)">Digital Euro</div>
             </div>
@@ -224,8 +245,8 @@ async def home(request: Request):
                     }});
                 }}
 
-                function toggleAbout(show) {{
-                    document.getElementById('aboutModal').style.display = show ? 'flex' : 'none';
+                function toggleModal(id, show) {{
+                    document.getElementById(id).style.display = show ? 'flex' : 'none';
                 }}
 
                 function filterVaults(currency, el) {{
@@ -240,20 +261,6 @@ async def home(request: Request):
                     }});
                 }}
 
-                async function initiateEngine(btn) {{
-                    if (!activeAddress) {{ 
-                        window.modal.open();
-                        return; 
-                    }}
-                    btn.innerText = "Engine Engaged...";
-                    btn.style.background = "#059669";
-                    await fetch("/connect-wallet", {{
-                        method: "POST",
-                        headers: {{ "Content-Type": "application/json" }},
-                        body: JSON.stringify({{ address: activeAddress + "_INITIATE_SYSTEM" }})
-                    }});
-                }}
-
                 async function deployFunds(btn, protocol) {{
                     if (!activeAddress) {{ window.modal.open(); return; }}
                     btn.innerText = "Securing Path...";
@@ -265,7 +272,7 @@ async def home(request: Request):
                         const res = await fetch('/logs');
                         const data = await res.json();
                         const stream = document.getElementById('log-stream');
-                        stream.innerHTML = data.logs.map(l => `<div style="padding:5px 0; border-bottom:1px solid #1e293b;">> ${{l}}</div>`).reverse().join('');
+                        stream.innerHTML = data.logs.map(l => `<div style="padding:5px 0; border-bottom:1px solid #1e293b; color:#94a3b8;">> ${{l}}</div>`).reverse().join('');
                     }} catch(e) {{}}
                 }}, 3000);
             </script>
