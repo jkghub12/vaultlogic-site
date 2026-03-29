@@ -140,7 +140,7 @@ async def home(request: Request):
                     background: rgba(255, 255, 255, 0.95); 
                     backdrop-filter: blur(10px);
                     border-bottom: 1px solid var(--border); 
-                    padding: 0 20px; 
+                    padding: 0 15px; 
                     height: 70px;
                     display: flex; 
                     justify-content: space-between; 
@@ -149,14 +149,14 @@ async def home(request: Request):
                     top: 0; 
                     z-index: 100; 
                 }}
-                .logo {{ display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 800; color: var(--primary); font-size: 16px; }}
-                .logo img {{ height: 28px; width: auto; border-radius: 4px; }}
+                .logo {{ display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 800; color: var(--primary); font-size: 14px; }}
+                .logo img {{ height: 24px; width: auto; border-radius: 4px; }}
                 
-                .nav-actions {{ display: flex; gap: 12px; align-items: center; }}
-                .nav-link {{ display: none; color: #64748b; font-size: 11px; font-weight: 700; text-decoration: none; cursor: pointer; }}
+                .nav-actions {{ display: flex; gap: 10px; align-items: center; }}
+                .nav-link {{ color: #64748b; font-size: 10px; font-weight: 700; text-decoration: none; cursor: pointer; text-transform: uppercase; }}
                 
-                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; white-space: nowrap; }}
-                .btn-inst {{ display: none; }}
+                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 11px; white-space: nowrap; }}
+                .btn-inst {{ border: 1px solid var(--border); background: white; padding: 8px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 11px; }}
 
                 #control-panel {{ 
                     max-width: 1200px; 
@@ -190,41 +190,33 @@ async def home(request: Request):
                 .card-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }}
                 .protocol-label {{ font-size: 10px; font-weight: 800; color: var(--accent); }}
                 .asset-title {{ margin: 2px 0 0 0; font-size: 18px; font-weight: 800; }}
-                .risk-badge {{ font-size: 8px; font-weight: 900; padding: 4px 8px; border-radius: 4px; }}
-                .risk-low {{ background: #f0fdf4; color: #166534; }}
-                .risk-minimal {{ background: #eff6ff; color: #1e40af; }}
-                .risk-med {{ background: #fffbeb; color: #92400e; }}
-
+                
                 .yield-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }}
                 .yield-box {{ padding: 10px; border: 1px solid var(--border); border-radius: 8px; }}
                 .yield-box.highlighted {{ background: #f8fafc; border-color: var(--accent); }}
                 .yield-box label {{ font-size: 9px; font-weight: 700; color: #64748b; display: block; }}
                 .yield-box .value {{ font-size: 18px; font-weight: 800; }}
 
-                .util-bar {{ background: #f1f5f9; height: 16px; border-radius: 4px; position: relative; margin-bottom: 15px; overflow: hidden; }}
-                .util-fill {{ background: #cbd5e1; height: 100%; }}
-                .util-text {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 9px; font-weight: 800; color: #475569; }}
-
-                .deploy-btn {{ width: 100%; background: #f8fafc; border: 1px solid var(--border); padding: 12px; border-radius: 8px; font-weight: 800; font-size: 12px; }}
-
                 #console-wrap {{ margin: 20px; background: #0f172a; border-radius: 12px; overflow: hidden; }}
                 .console-head {{ padding: 10px 15px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 10px; font-weight: 800; display: flex; justify-content: space-between; }}
                 #log-stream {{ padding: 15px; height: 150px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 11px; color: #34d399; }}
 
-                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:10000; justify-content:center; align-items:center; }}
-                .modal-content {{ background: white; padding: 25px; border-radius: 12px; width: 85%; max-width: 400px; position: relative; }}
+                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:10000; justify-content:center; align-items:center; backdrop-filter: blur(4px); }}
+                .modal-content {{ background: white; padding: 30px; border-radius: 16px; width: 85%; max-width: 450px; position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }}
+                .modal-content h2 {{ margin-top: 0; font-weight: 800; color: var(--primary); }}
+                .modal-content p {{ font-size: 14px; line-height: 1.6; color: #475569; }}
+                .close-modal {{ position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 18px; color: #94a3b8; font-weight: 800; }}
 
                 @media (min-width: 768px) {{
                     .top-nav {{ padding: 0 40px; }}
                     .logo {{ font-size: 19px; }}
                     .logo img {{ height: 34px; }}
-                    .nav-link, .btn-inst {{ display: block; }}
+                    .nav-link {{ font-size: 12px; }}
                     .container {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); padding: 40px; max-width: 1200px; margin: 0 auto; }}
                     #control-panel {{ flex-direction: row; padding: 20px 30px; margin: 20px auto; }}
                     .engine-actions {{ width: auto; }}
                     .btn-start, .btn-stop {{ width: auto; padding: 10px 24px; }}
                     .stats-ribbon {{ grid-template-columns: repeat(4, 1fr); padding: 20px 40px; }}
-                    .yield-box .value {{ font-size: 24px; }}
                 }}
             </style>
         </head>
@@ -235,6 +227,7 @@ async def home(request: Request):
                 </a>
                 <div class="nav-actions">
                     <a class="nav-link" onclick="toggleModal('aboutModal', true)">ABOUT</a>
+                    <a class="nav-link" onclick="toggleModal('complianceModal', true)">COMPLIANCE</a>
                     <button class="btn-inst" onclick="toggleModal('loginModal', true)">LOGIN</button>
                     <button id="connectBtn" class="btn-connect" onclick="window.modal.open()">CONNECT</button>
                     <div id="walletDisplay" style="display:none; text-align:right;">
@@ -278,16 +271,29 @@ async def home(request: Request):
             <!-- MODALS -->
             <div id="aboutModal" class="modal-overlay" onclick="toggleModal('aboutModal', false)">
                 <div class="modal-content" onclick="event.stopPropagation()">
-                    <h2>VaultLogic</h2>
-                    <p>Institutional-grade ALM protocol built for the Base ecosystem. Predictive modeling and automated rebalancing for digital treasuries.</p>
+                    <span class="close-modal" onclick="toggleModal('aboutModal', false)">✕</span>
+                    <h2>Industrial Liquidity</h2>
+                    <p>VaultLogic is a specialized Asset-Liability Management (ALM) protocol built for the Base ecosystem.</p>
+                    <p>We provide institutional-grade yield optimization through predictive modeling and automated rebalancing, acting as a "Risk-Off" layer for digital treasuries.</p>
+                </div>
+            </div>
+
+            <div id="complianceModal" class="modal-overlay" onclick="toggleModal('complianceModal', false)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <span class="close-modal" onclick="toggleModal('complianceModal', false)">✕</span>
+                    <h2>Compliance & Security</h2>
+                    <p>VaultLogic operations are fully non-custodial. All on-chain interactions are audited and monitored in real-time by the ALM Kernel.</p>
+                    <p>Our infrastructure is designed for regulatory transparency and principal preservation.</p>
                 </div>
             </div>
 
             <div id="loginModal" class="modal-overlay" onclick="toggleModal('loginModal', false)">
-                <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-content" style="max-width:350px; text-align:center;" onclick="event.stopPropagation()">
+                    <span class="close-modal" onclick="toggleModal('loginModal', false)">✕</span>
                     <h2>Institutional Access</h2>
-                    <input type="password" placeholder="Access Key" style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; margin-top:15px;">
-                    <button class="btn-connect" style="width:100%;" onclick="alert('Access denied.')">Login</button>
+                    <p>Admin dashboard for whitelisted entities.</p>
+                    <input type="password" placeholder="Access Key" style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; margin-top:10px;">
+                    <button class="btn-connect" style="width:100%;" onclick="alert('Access denied. No HW key detected.')">Login</button>
                 </div>
             </div>
 
@@ -303,7 +309,6 @@ async def home(request: Request):
                     document.getElementById('addrText').innerText = address.substring(0,6) + "..." + address.substring(38);
                     document.getElementById('session-addr').innerText = address;
                     
-                    // Center the view on the control panel for mobile users
                     if(window.innerWidth < 768) {{
                         document.getElementById('control-panel').scrollIntoView({{ behavior: 'smooth' }});
                     }}
