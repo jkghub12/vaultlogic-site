@@ -104,7 +104,7 @@ async def home(request: Request):
     <html>
         <head>
             <title>VaultLogic | Institutional ALM</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <script type="module">
                 import {{ createAppKit }} from 'https://esm.sh/@reown/appkit'
                 import {{ Ethers5Adapter }} from 'https://esm.sh/@reown/appkit-adapter-ethers5'
@@ -119,7 +119,7 @@ async def home(request: Request):
                         'c57ca71047597b42ddc9d30d30569074b83049102b4d8f5a62e399580577b30c'
                     ],
                     themeMode: 'light',
-                    themeVariables: {{ '--w3m-accent': '#0f172a' }}
+                    themeVariables: {{ '--w3m-accent': '#0f172a', '--w3m-z-index': '9999' }}
                 }});
                 window.modal = modal;
                 modal.subscribeAccount(state => {{ 
@@ -134,13 +134,13 @@ async def home(request: Request):
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
                 :root {{ --primary: #0f172a; --accent: #2563eb; --border: #e2e8f0; --danger: #ef4444; --success: #22c55e; }}
-                body {{ background:#f1f5f9; color:var(--primary); font-family: 'Public Sans', sans-serif; margin:0; -webkit-font-smoothing: antialiased; }}
+                body {{ background:#f1f5f9; color:var(--primary); font-family: 'Public Sans', sans-serif; margin:0; -webkit-font-smoothing: antialiased; overflow-x: hidden; }}
                 
                 .top-nav {{ 
                     background: rgba(255, 255, 255, 0.95); 
                     backdrop-filter: blur(10px);
                     border-bottom: 1px solid var(--border); 
-                    padding: 0 40px; 
+                    padding: 0 20px; 
                     height: 70px;
                     display: flex; 
                     justify-content: space-between; 
@@ -149,81 +149,82 @@ async def home(request: Request):
                     top: 0; 
                     z-index: 100; 
                 }}
-                .logo {{ display: flex; align-items: center; gap: 12px; text-decoration: none; font-weight: 800; color: var(--primary); font-size: 19px; }}
-                .logo img {{ height: 34px; width: auto; border-radius: 6px; }}
+                .logo {{ display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 800; color: var(--primary); font-size: 16px; }}
+                .logo img {{ height: 28px; width: auto; border-radius: 4px; }}
                 
-                .nav-actions {{ display: flex; gap: 24px; align-items: center; }}
-                .nav-link {{ color: #64748b; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; letter-spacing: 0.5px; transition: color 0.2s; }}
-                .nav-link:hover {{ color: var(--accent); }}
+                .nav-actions {{ display: flex; gap: 12px; align-items: center; }}
+                .nav-link {{ display: none; color: #64748b; font-size: 11px; font-weight: 700; text-decoration: none; cursor: pointer; }}
                 
-                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }}
-                .btn-inst {{ border: 1px solid var(--border); background: white; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }}
+                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; white-space: nowrap; }}
+                .btn-inst {{ display: none; }}
 
                 #control-panel {{ 
                     max-width: 1200px; 
-                    margin: 20px auto 0; 
-                    padding: 20px 30px; 
+                    margin: 10px auto; 
+                    padding: 15px; 
                     background: white; 
                     border: 1px solid var(--border); 
                     border-radius: 12px; 
                     display: none; 
-                    align-items: center; 
-                    justify-content: space-between;
+                    flex-direction: column;
+                    gap: 15px;
                     box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
                 }}
                 
-                .status-block {{ display: flex; align-items: center; gap: 15px; }}
-                .status-indicator {{ width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }}
+                .status-block {{ display: flex; align-items: center; gap: 12px; }}
+                .status-indicator {{ width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; flex-shrink: 0; }}
                 .status-active {{ background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 2s infinite; }}
                 @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} 100% {{ opacity: 1; }} }}
                 
-                .engine-actions {{ display: flex; gap: 10px; }}
-                .btn-start {{ background: var(--success); color: white; border: none; padding: 10px 24px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
-                .btn-stop {{ background: white; color: var(--danger); border: 1px solid var(--danger); padding: 10px 24px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
+                .engine-actions {{ width: 100%; }}
+                .btn-start {{ width: 100%; background: var(--success); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 14px; }}
+                .btn-stop {{ width: 100%; background: white; color: var(--danger); border: 1px solid var(--danger); padding: 14px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 14px; }}
 
-                .stats-ribbon {{ background: white; border-bottom: 1px solid var(--border); padding: 20px 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }}
-                .stat-item label {{ font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }}
-                .stat-item .val {{ font-size: 20px; font-weight: 800; color: var(--primary); }}
+                .stats-ribbon {{ background: white; border-bottom: 1px solid var(--border); padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
+                .stat-item label {{ font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: block; }}
+                .stat-item .val {{ font-size: 16px; font-weight: 800; color: var(--primary); }}
 
-                .container {{ max-width: 1200px; margin: 40px auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }}
-                .strategy-card {{ background: white; border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); }}
-                .strategy-card:hover {{ border-color: var(--accent); transform: translateY(-4px); }}
+                .container {{ padding: 20px; display: grid; grid-template-columns: 1fr; gap: 20px; }}
+                .strategy-card {{ background: white; border: 1px solid var(--border); border-radius: 16px; padding: 20px; }}
                 
-                .card-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }}
-                .protocol-label {{ font-size: 11px; font-weight: 800; color: var(--accent); text-transform: uppercase; }}
-                .asset-title {{ margin: 4px 0 0 0; font-size: 22px; font-weight: 800; }}
-                .risk-badge {{ font-size: 9px; font-weight: 900; padding: 5px 10px; border-radius: 6px; }}
+                .card-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }}
+                .protocol-label {{ font-size: 10px; font-weight: 800; color: var(--accent); }}
+                .asset-title {{ margin: 2px 0 0 0; font-size: 18px; font-weight: 800; }}
+                .risk-badge {{ font-size: 8px; font-weight: 900; padding: 4px 8px; border-radius: 4px; }}
                 .risk-low {{ background: #f0fdf4; color: #166534; }}
                 .risk-minimal {{ background: #eff6ff; color: #1e40af; }}
                 .risk-med {{ background: #fffbeb; color: #92400e; }}
 
-                .yield-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }}
-                .yield-box {{ padding: 14px; border: 1px solid var(--border); border-radius: 10px; }}
+                .yield-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }}
+                .yield-box {{ padding: 10px; border: 1px solid var(--border); border-radius: 8px; }}
                 .yield-box.highlighted {{ background: #f8fafc; border-color: var(--accent); }}
-                .yield-box label {{ font-size: 10px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px; }}
-                .yield-box .value {{ font-size: 24px; font-weight: 800; }}
+                .yield-box label {{ font-size: 9px; font-weight: 700; color: #64748b; display: block; }}
+                .yield-box .value {{ font-size: 18px; font-weight: 800; }}
 
-                .util-bar {{ background: #f1f5f9; height: 20px; border-radius: 6px; position: relative; margin-bottom: 24px; overflow: hidden; border: 1px solid #e2e8f0; }}
-                .util-fill {{ background: #cbd5e1; height: 100%; transition: width 1s ease; }}
-                .util-text {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px; font-weight: 800; color: #475569; }}
+                .util-bar {{ background: #f1f5f9; height: 16px; border-radius: 4px; position: relative; margin-bottom: 15px; overflow: hidden; }}
+                .util-fill {{ background: #cbd5e1; height: 100%; }}
+                .util-text {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 9px; font-weight: 800; color: #475569; }}
 
-                .deploy-btn {{ width: 100%; background: #f8fafc; border: 1px solid var(--border); padding: 14px; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 13px; }}
-                .deploy-btn:hover {{ background: var(--primary); color: white; }}
+                .deploy-btn {{ width: 100%; background: #f8fafc; border: 1px solid var(--border); padding: 12px; border-radius: 8px; font-weight: 800; font-size: 12px; }}
 
-                #console-wrap {{ max-width: 1200px; margin: 40px auto; background: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }}
-                .console-head {{ padding: 14px 24px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 11px; font-weight: 800; display: flex; justify-content: space-between; letter-spacing: 1px; }}
-                #log-stream {{ padding: 24px; height: 200px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 12px; color: #34d399; line-height: 1.6; }}
+                #console-wrap {{ margin: 20px; background: #0f172a; border-radius: 12px; overflow: hidden; }}
+                .console-head {{ padding: 10px 15px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 10px; font-weight: 800; display: flex; justify-content: space-between; }}
+                #log-stream {{ padding: 15px; height: 150px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 11px; color: #34d399; }}
 
-                /* Modals Restored */
-                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.9); z-index:2000; justify-content:center; align-items:center; backdrop-filter: blur(4px); }}
-                .modal-content {{ background: white; padding: 48px; border-radius: 20px; max-width: 500px; width: 90%; text-align: left; }}
-                .modal-content h2 {{ font-size:28px; font-weight:800; margin-top:0; letter-spacing:-0.5px; }}
-                .modal-content p {{ color:#64748b; line-height:1.6; font-size:15px; }}
+                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:10000; justify-content:center; align-items:center; }}
+                .modal-content {{ background: white; padding: 25px; border-radius: 12px; width: 85%; max-width: 400px; position: relative; }}
 
-                @media (max-width: 768px) {{
-                    .top-nav {{ flex-direction: column; height: auto; padding: 20px; gap: 15px; }}
-                    #control-panel {{ flex-direction: column; gap: 15px; text-align: center; }}
-                    .stats-ribbon {{ grid-template-columns: 1fr 1fr; padding: 20px; }}
+                @media (min-width: 768px) {{
+                    .top-nav {{ padding: 0 40px; }}
+                    .logo {{ font-size: 19px; }}
+                    .logo img {{ height: 34px; }}
+                    .nav-link, .btn-inst {{ display: block; }}
+                    .container {{ grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); padding: 40px; max-width: 1200px; margin: 0 auto; }}
+                    #control-panel {{ flex-direction: row; padding: 20px 30px; margin: 20px auto; }}
+                    .engine-actions {{ width: auto; }}
+                    .btn-start, .btn-stop {{ width: auto; padding: 10px 24px; }}
+                    .stats-ribbon {{ grid-template-columns: repeat(4, 1fr); padding: 20px 40px; }}
+                    .yield-box .value {{ font-size: 24px; }}
                 }}
             </style>
         </head>
@@ -234,12 +235,11 @@ async def home(request: Request):
                 </a>
                 <div class="nav-actions">
                     <a class="nav-link" onclick="toggleModal('aboutModal', true)">ABOUT</a>
-                    <a class="nav-link" onclick="toggleModal('complianceModal', true)">COMPLIANCE</a>
-                    <button class="btn-inst" onclick="toggleModal('loginModal', true)">INST. LOGIN</button>
-                    <button id="connectBtn" class="btn-connect" onclick="window.modal.open()">CONNECT WALLET</button>
+                    <button class="btn-inst" onclick="toggleModal('loginModal', true)">LOGIN</button>
+                    <button id="connectBtn" class="btn-connect" onclick="window.modal.open()">CONNECT</button>
                     <div id="walletDisplay" style="display:none; text-align:right;">
-                        <div id="addrText" style="font-family:'JetBrains Mono'; font-size:11px; font-weight:800;"></div>
-                        <div id="connStatus" style="font-size:10px; color: #94a3b8; font-weight:800;">● SYSTEM STANDBY</div>
+                        <div id="addrText" style="font-family:'JetBrains Mono'; font-size:10px; font-weight:800;"></div>
+                        <div id="connStatus" style="font-size:9px; color: #94a3b8; font-weight:800; text-transform:uppercase;">● Standby</div>
                     </div>
                 </div>
             </nav>
@@ -248,59 +248,46 @@ async def home(request: Request):
                 <div class="status-block">
                     <div id="engine-dot" class="status-indicator"></div>
                     <div>
-                        <div style="font-size: 13px; font-weight: 800;">ALM KERNEL STATUS: <span id="engine-status-text">IDLE</span></div>
-                        <div style="font-size: 10px; color: #64748b; font-weight: 600;">Authorized Session: <span id="session-addr"></span></div>
+                        <div style="font-size: 12px; font-weight: 800;">ALM KERNEL: <span id="engine-status-text">IDLE</span></div>
+                        <div style="font-size: 9px; color: #64748b; font-weight: 600; word-break: break-all;" id="session-addr"></div>
                     </div>
                 </div>
                 <div class="engine-actions">
                     <button id="btnInitiate" class="btn-start" onclick="initiateEngine()">INITIATE ENGINE</button>
-                    <button id="btnTerminate" class="btn-stop" style="display:none;" onclick="terminateEngine()">TERMINATE SESSION</button>
+                    <button id="btnTerminate" class="btn-stop" style="display:none;" onclick="terminateEngine()">TERMINATE</button>
                 </div>
             </div>
 
             <div class="stats-ribbon">
-                <div class="stat-item"><label>System TVL</label><div class="val" id="stat-tvl">$142.8M</div></div>
-                <div class="stat-item"><label>Reserve Ratio</label><div class="val">104.2%</div></div>
-                <div class="stat-item"><label>System Health</label><div class="val" id="stat-health" style="color:#22c55e;">99.8%</div></div>
-                <div class="stat-item"><label>ALM Frequency</label><div class="val">Real-Time</div></div>
+                <div class="stat-item"><label>TVL</label><div class="val">$142.8M</div></div>
+                <div class="stat-item"><label>Reserve</label><div class="val">104.2%</div></div>
+                <div class="stat-item"><label>Health</label><div class="val" style="color:#22c55e;">99.8%</div></div>
+                <div class="stat-item"><label>Freq</label><div class="val">Real-Time</div></div>
             </div>
 
             <div class="container">{yield_cards}</div>
 
             <div id="console-wrap">
                 <div class="console-head">
-                    <span>VAULTLOGIC KERNEL EXECUTION LOG</span>
-                    <span id="stat-rebalance">UPTIME: 00:00:00</span>
+                    <span>EXECUTION LOG</span>
+                    <span id="uptime-text">00:00:00</span>
                 </div>
                 <div id="log-stream"></div>
             </div>
 
-            <!-- RESTORED MODALS -->
+            <!-- MODALS -->
             <div id="aboutModal" class="modal-overlay" onclick="toggleModal('aboutModal', false)">
                 <div class="modal-content" onclick="event.stopPropagation()">
-                    <h2>Industrial Yield Optimization</h2>
-                    <p>VaultLogic uses a proprietary Asset-Liability Management engine to ensure that your digital treasury is always positioned in the highest-yielding, lowest-risk protocols on Base.</p>
-                    <p>Our kernel monitors liquidity depth, implied volatility, and peg stability 24/7 to protect institutional principal.</p>
-                    <button onclick="toggleModal('aboutModal', false)" style="width:100%; background:#f1f5f9; border:none; padding:12px; border-radius:8px; font-weight:700; cursor:pointer; margin-top:20px;">Dismiss</button>
-                </div>
-            </div>
-
-            <div id="complianceModal" class="modal-overlay" onclick="toggleModal('complianceModal', false)">
-                <div class="modal-content" onclick="event.stopPropagation()">
-                    <h2>Audit & Transparency</h2>
-                    <p>All transactions are executed on-chain and are fully auditable. VaultLogic follows strict non-custodial execution patterns.</p>
-                    <button onclick="alert('Audit Trail Exported to CSV')" style="width:100%; background:#0f172a; color:white; padding:14px; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:10px;">Export Audit Trail (CSV)</button>
-                    <button onclick="toggleModal('complianceModal', false)" style="width:100%; background:none; border:none; padding:12px; color:#94a3b8; cursor:pointer; font-weight:600;">Close</button>
+                    <h2>VaultLogic</h2>
+                    <p>Institutional-grade ALM protocol built for the Base ecosystem. Predictive modeling and automated rebalancing for digital treasuries.</p>
                 </div>
             </div>
 
             <div id="loginModal" class="modal-overlay" onclick="toggleModal('loginModal', false)">
-                <div class="modal-content" style="max-width: 380px; text-align:center;" onclick="event.stopPropagation()">
-                    <h3 style="font-size:24px; font-weight:800; margin-top:0;">Institutional Access</h3>
-                    <p style="font-size:13px; color:#64748b; margin-bottom:24px;">Please authenticate via your hardware security module (HSM) or system key for administrative access.</p>
-                    <input type="password" placeholder="System Key" style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:15px; font-size:16px;">
-                    <button class="btn-connect" style="width:100%; padding:15px;" onclick="alert('Access Restricted to Whitelisted Keys.')">AUTHENTICATE</button>
-                    <button onclick="toggleModal('loginModal', false)" style="width:100%; background:none; border:none; padding:12px; color:#94a3b8; cursor:pointer;">Cancel</button>
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <h2>Institutional Access</h2>
+                    <input type="password" placeholder="Access Key" style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; margin-top:15px;">
+                    <button class="btn-connect" style="width:100%;" onclick="alert('Access denied.')">Login</button>
                 </div>
             </div>
 
@@ -315,6 +302,12 @@ async def home(request: Request):
                     document.getElementById('control-panel').style.display = 'flex';
                     document.getElementById('addrText').innerText = address.substring(0,6) + "..." + address.substring(38);
                     document.getElementById('session-addr').innerText = address;
+                    
+                    // Center the view on the control panel for mobile users
+                    if(window.innerWidth < 768) {{
+                        document.getElementById('control-panel').scrollIntoView({{ behavior: 'smooth' }});
+                    }}
+                    
                     fetch("/connect-wallet", {{ method: "POST", headers: {{"Content-Type": "application/json"}}, body: JSON.stringify({{ address: address }}) }});
                 }}
 
@@ -338,7 +331,7 @@ async def home(request: Request):
                     if(res.ok) {{
                         document.getElementById('engine-dot').classList.add('status-active');
                         document.getElementById('engine-status-text').innerText = "RUNNING";
-                        document.getElementById('connStatus').innerText = "● KERNEL ACTIVE";
+                        document.getElementById('connStatus').innerText = "● Active";
                         document.getElementById('connStatus').style.color = "#22c55e";
                         document.getElementById('btnInitiate').style.display = 'none';
                         document.getElementById('btnTerminate').style.display = 'block';
@@ -346,7 +339,7 @@ async def home(request: Request):
                 }}
 
                 async function terminateEngine() {{
-                    if(!confirm("Warning: Terminating session will stop all active ALM rebalancing for this wallet. Continue?")) return;
+                    if(!confirm("Halt Kernel?")) return;
                     await fetch("/connect-wallet", {{ 
                         method: "POST", 
                         headers: {{"Content-Type": "application/json"}}, 
