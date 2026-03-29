@@ -19,13 +19,12 @@ def add_log(msg):
     if len(system_logs) > 50: system_logs.pop(0)
 
 async def get_industrial_yields():
-    # Expanding the customer base by offering Global Digital Currencies (EURC, PYUSD)
     return [
-        {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "USDC", "type": "STABLE", "currency": "USD"},
-        {"protocol": "AAVE V3", "apy": 4.12, "predicted": 4.25, "asset": "EURC", "type": "GLOBAL", "currency": "EUR"},
-        {"protocol": "AERODROME", "apy": 12.41, "predicted": 11.15, "asset": "PYUSD/USDC", "type": "BOOSTED", "currency": "USD"},
-        {"protocol": "UNISWAP V3", "apy": 3.55, "predicted": 4.10, "asset": "USDC/EURC", "type": "FOREX", "currency": "MULTI"},
-        {"protocol": "BEEFY", "apy": 8.15, "predicted": 8.02, "asset": "EURC/USDC LP", "type": "AUTO-COMPOUND", "currency": "EUR"}
+        {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "USDC", "type": "ORGANIC", "currency": "USD"},
+        {"protocol": "AAVE V3", "apy": 2.87, "predicted": 2.95, "asset": "USDC", "type": "ORGANIC", "currency": "USD"},
+        {"protocol": "AERODROME", "apy": 12.41, "predicted": 11.15, "asset": "cbBTC/WETH", "type": "BOOSTED", "currency": "MULTI"},
+        {"protocol": "UNISWAP V3", "apy": 3.55, "predicted": 4.10, "asset": "USDC/ETH", "type": "CONCENTRATED", "currency": "MULTI"},
+        {"protocol": "BEEFY", "apy": 8.15, "predicted": 8.02, "asset": "WETH/USDC LP", "type": "AUTO-COMPOUND", "currency": "MULTI"}
     ]
 
 @app.post("/connect-wallet")
@@ -33,7 +32,7 @@ async def connect(data: WalletConnect):
     try:
         from engine import run_alm_engine
         if data.address == "DISCONNECT":
-            add_log("SYSTEM: Wallet Session Terminated by User.")
+            add_log("SYSTEM: Wallet Session Terminated.")
             return {"status": "disconnected"}
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "success"}
@@ -44,13 +43,6 @@ async def connect(data: WalletConnect):
 @app.get("/logs")
 async def get_logs():
     return {"logs": system_logs}
-
-@app.get("/download-logs")
-async def download_logs():
-    csv_content = "Timestamp,Event\n"
-    for log in system_logs:
-        csv_content += f"{log}\n"
-    return PlainTextResponse(csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=vaultlogic_audit_log.csv"})
 
 @app.on_event("startup")
 async def startup():
@@ -66,156 +58,154 @@ async def startup():
 async def home(request: Request):
     yield_cards = "".join([f"""
         <div class="strategy-card" data-currency="{y['currency']}">
-            <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
-                <h3 style="margin:0; color:#1a2b4b; font-size:14px; font-weight:700;">{y['protocol']}</h3>
-                <span style="font-size:10px; color:#2563eb; background:#eff6ff; padding:4px 8px; border-radius:20px; font-weight:600;">{y['type']}</span>
+            <div class="card-glow"></div>
+            <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px; position:relative; z-index:1;">
+                <h3 style="margin:0; color:#00ffa3; font-size:12px; letter-spacing:1px; font-weight:800;">{y['protocol']}</h3>
+                <span class="type-tag">{y['type']}</span>
             </div>
             <div class="yield-display">
                 <div class="current-apy">
-                    <p style="margin:5px 0; font-size:32px; font-weight:800; color:#0f172a;">{y['apy']}% <span style="font-size:14px; color:#94a3b8; font-weight:400;">APR</span></p>
+                    <p style="margin:5px 0; font-size:32px; font-weight:800; color:#ffffff;">{y['apy']}% <span style="font-size:12px; color:#475569; font-weight:400;">APR</span></p>
+                    <small style="color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:1px;">{y['asset']}</small>
                 </div>
                 <div class="ai-shadow">
-                    <span style="font-size:10px; letter-spacing:1px; color:#2563eb; font-weight:bold;">AI FORECAST (24H):</span>
-                    <span style="font-size:22px; font-weight:700; color:#1e293b; display:block;">{y['predicted']}%</span>
+                    <span style="font-size:9px; letter-spacing:1px; color:#00ffa3; font-weight:bold; text-transform:uppercase;">AI FORECAST (24H)</span>
+                    <span style="font-size:24px; font-weight:800; color:#fff; display:block;">{y['predicted']}%</span>
                 </div>
             </div>
-            <div style="margin-bottom:20px;">
-                <small style="color:#64748b; font-size:12px;">Asset: <strong>{y['asset']}</strong></small>
-            </div>
             <button onclick="deployFunds(this, '{y['protocol']}')" class="deploy-btn">
-                Deploy Liquidity
+                DEPLOY {y['asset'].split('/')[0]}
             </button>
         </div>""" for y in vault_cache["yields"]])
 
     return f"""
     <html>
         <head>
-            <title>VaultLogic | Global ALM</title>
+            <title>VaultLogic | Industrial ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
-                body {{ background:#f8fafc; color:#1e293b; font-family: 'Inter', sans-serif; text-align:center; padding:0; margin:0; line-height:1.6; scroll-behavior: smooth; }}
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=JetBrains+Mono&display=swap');
                 
-                .top-nav {{ background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
+                :root {{
+                    --bg: #000000;
+                    --card-bg: #0a0a0a;
+                    --accent: #00ffa3;
+                    --border: #1a1a1a;
+                    --text: #ffffff;
+                    --text-muted: #666666;
+                }}
+
+                body {{ 
+                    background: var(--bg); 
+                    color: var(--text); 
+                    font-family: 'Inter', sans-serif; 
+                    margin:0; 
+                    line-height:1.6;
+                }}
+                
+                .top-nav {{ 
+                    background: rgba(0,0,0,0.8); 
+                    backdrop-filter: blur(10px);
+                    border-bottom: 1px solid var(--border); 
+                    padding: 15px 40px; 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    position: sticky; 
+                    top: 0; 
+                    z-index: 100; 
+                }}
+
                 .logo-container {{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }}
+                .logo-img {{ height: 28px; width: auto; }}
+                .logo-fallback {{ 
+                    display: none; background: var(--accent); color: #000; 
+                    padding: 4px 8px; border-radius: 4px; font-weight: 800; font-size: 14px; 
+                }}
                 
-                /* Logo with Fallback */
-                .logo-icon {{ width: 32px; height: 32px; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; }}
-                .logo-img {{ height: 36px; width: auto; border-radius: 4px; display: block; }}
-                
-                .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
-                .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
-                
-                .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; position: relative; overflow: hidden; }}
-                .hero-section::after {{ content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.04) 0%, transparent 70%); pointer-events: none; }}
-                
-                /* Strategy Cards & AI Shadow */
-                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
-                .strategy-card {{ background:#fff; padding:30px; border-radius:16px; border:1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:left; position: relative; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: default; overflow: hidden; }}
-                .strategy-card:hover {{ transform: translateY(-8px); border-color: #2563eb; box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.1); }}
-                
-                .yield-display {{ position: relative; height: 75px; display: flex; align-items: center; }}
-                .current-apy {{ transition: all 0.3s ease; width: 100%; }}
-                .ai-shadow {{ position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: white; opacity: 0; transform: translateY(20px) scale(0.95); transition: all 0.4s ease; display: flex; flex-direction: column; justify-content: center; pointer-events: none; filter: blur(4px); }}
-                
-                .strategy-card:hover .current-apy {{ opacity: 0.1; filter: blur(8px); transform: scale(0.9); }}
-                .strategy-card:hover .ai-shadow {{ opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }}
-                
-                .deploy-btn {{ width:100%; background:#2563eb; color:#fff; border:none; padding:14px; font-weight:700; font-size:13px; cursor:pointer; border-radius:10px; transition: background 0.2s; }}
-                .deploy-btn:hover {{ background: #1d4ed8; }}
+                .nav-links a {{ margin-left: 20px; text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor:pointer; }}
+                .nav-links a:hover {{ color: var(--accent); }}
 
-                .filter-bar {{ max-width: 1200px; margin: 30px auto 10px; padding: 0 20px; display: flex; gap: 12px; justify-content: center; }}
-                .filter-pill {{ padding: 8px 20px; border-radius: 25px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: white; color: #64748b; transition: all 0.2s; }}
-                .filter-pill.active {{ background: #0f172a; color: white; border-color: #0f172a; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                .hero-section {{ padding: 80px 20px; text-align: center; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 50% 0%, #00ffa311 0%, transparent 50%); }}
+                
+                .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); max-width:1200px; margin:40px auto; gap:20px; padding: 0 20px; }}
+                
+                .strategy-card {{ 
+                    background: var(--card-bg); 
+                    padding: 25px; 
+                    border-radius: 4px; 
+                    border: 1px solid var(--border); 
+                    position: relative; 
+                    transition: all 0.3s ease;
+                    overflow: hidden;
+                }}
+                .strategy-card:hover {{ border-color: var(--accent); }}
+                .card-glow {{ 
+                    position: absolute; top:0; left:0; width:2px; height:100%; 
+                    background: var(--accent); opacity: 0.5; 
+                }}
 
-                #console {{ max-width:1160px; margin:40px auto; background:#0f172a; border:1px solid #1e293b; border-radius:16px; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }}
-                .console-header {{ background: #1e293b; padding: 18px 25px; display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #334155; }}
-                #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; scrollbar-width: thin; scrollbar-color: #334155 #0f172a; }}
-                .log-entry {{ padding: 6px 0; border-bottom: 1px solid #1e293b; line-height: 1.5; }}
+                .type-tag {{ font-size:9px; color: var(--text-muted); border: 1px solid var(--border); padding:2px 8px; border-radius:2px; text-transform: uppercase; font-weight: 700; }}
+
+                .yield-display {{ position: relative; height: 90px; margin: 20px 0; }}
+                .ai-shadow {{ 
+                    position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
+                    background: var(--card-bg); opacity: 0; transform: translateY(10px); 
+                    transition: all 0.3s ease; display: flex; flex-direction: column; justify-content: center;
+                }}
+                .strategy-card:hover .ai-shadow {{ opacity: 1; transform: translateY(0); }}
+
+                .deploy-btn {{ 
+                    width:100%; background: var(--accent); color:#000; border:none; 
+                    padding:12px; font-weight:800; font-size:11px; cursor:pointer; 
+                    letter-spacing: 1px; transition: opacity 0.2s;
+                }}
+                .deploy-btn:hover {{ opacity: 0.8; }}
+
+                #console {{ max-width:1160px; margin:40px auto; background: #050505; border: 1px solid var(--border); border-radius: 4px; }}
+                .console-header {{ background: #0a0a0a; padding: 12px 20px; display:flex; justify-content:space-between; border-bottom: 1px solid var(--border); }}
+                #log-stream {{ padding: 20px; height: 250px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); text-align: left; }}
                 
-                .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; transition: all 0.2s; }}
-                .connect-btn:hover {{ background: #2563eb; transform: translateY(-1px); }}
-                
-                .status-badge {{ font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800; border: 1px solid #dbeafe; text-transform: uppercase; letter-spacing: 0.5px; }}
+                .status-badge {{ font-size:10px; color: var(--accent); border: 1px solid var(--accent); padding:4px 12px; border-radius:20px; display:inline-block; font-weight: 800; text-transform: uppercase; margin-bottom: 20px; }}
+
+                .connect-btn {{ background: transparent; color: var(--text); border: 1px solid var(--text); padding: 8px 20px; font-size: 12px; font-weight: 700; cursor: pointer; }}
+                .connect-btn:hover {{ background: var(--text); color: #000; }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo-container">
-                    <img src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" onerror="this.style.display='none'; this.previousElementSibling.style.display='flex'" class="logo-img" alt="VL">
-                    <div class="logo-icon" style="display:none;">VL</div>
-                    <div class="logo-text">VAULTLOGIC</div>
+                    <img id="mainLogo" src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" 
+                         onerror="document.getElementById('mainLogo').style.display='none'; document.getElementById('logoFallback').style.display='block';" 
+                         class="logo-img" alt="VaultLogic">
+                    <div id="logoFallback" class="logo-fallback">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
-                    <a href="#strategies">Strategies</a>
-                    <a href="#tax-center">Compliance</a>
-                    <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800;">Institutional Login</a>
-                    <button id="connectBtn" class="connect-btn" style="margin-left:25px;" onclick="connectWallet()">Connect Wallet</button>
-                    <div id="walletDisplay" style="display:none; margin-left:25px; align-items:center;">
-                        <span id="addrText" style="font-family:'JetBrains Mono'; margin-right:15px; font-size:12px; color:#64748b; background:#f1f5f9; padding:6px 12px; border-radius:6px;"></span>
-                        <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:8px 16px; font-size:11px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Disconnect</button>
-                    </div>
+                    <a href="#strategies">Vaults</a>
+                    <a href="#compliance">Audit</a>
+                    <button id="connectBtn" class="connect-btn" onclick="connectWallet()">CONNECT WALLET</button>
+                    <div id="walletDisplay" style="display:none; color: var(--accent); font-family: 'JetBrains Mono'; font-size: 11px;"></div>
                 </div>
             </nav>
 
             <div class="hero-section">
-                <div class="status-badge">Kernel v2.5.9 • Industrial ALM</div>
-                <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
-                <p style="color:#64748b; max-width:650px; margin:25px auto 45px; font-size:19px; font-weight:500;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability and regulatory compliance.</p>
-                <div style="display:flex; justify-content:center; gap:15px;">
-                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
-                    <button onclick="window.open('https://github.com/VaultLogic/VaultLogic', '_blank')" style="background:#fff; color:#0f172a; border:1px solid #e2e8f0;" class="connect-btn">View Source</button>
-                </div>
-            </div>
-
-            <div class="filter-bar">
-                <div class="filter-pill active" onclick="filterVaults('ALL', this)">All Opportunities</div>
-                <div class="filter-pill" onclick="filterVaults('USD', this)">Digital USD</div>
-                <div class="filter-pill" onclick="filterVaults('EUR', this)">Digital Euro</div>
+                <div class="status-badge">Kernel v2.5.9 // Online</div>
+                <h1 style="font-size:52px; font-weight:800; margin:0; letter-spacing:-2px;">INDUSTRIAL LIQUIDITY.</h1>
+                <p style="color: var(--text-muted); max-width:500px; margin:15px auto; font-size:16px;">Autonomous yield forecasting and principal protection for institutional-grade stablecoins.</p>
             </div>
             
             <div id="strategies" class="container">{yield_cards}</div>
 
             <div id="console">
                 <div class="console-header">
-                    <span style="font-weight:800; font-size:11px; color:#94a3b8; letter-spacing:2px; text-transform:uppercase;">Strategy Audit Stream</span>
-                    <div style="display:flex; gap:12px;">
-                        <button onclick="alert('Exporting Audit Log...')" style="cursor:pointer; background:#334155; border:none; color:white; font-size:10px; font-weight:800; padding:6px 12px; border-radius:4px; text-transform:uppercase;">Download CSV</button>
-                    </div>
+                    <span style="font-weight:800; font-size:10px; color: var(--text-muted); letter-spacing:1px;">EXECUTION LOG (LIVE)</span>
+                    <button onclick="window.location='/download-logs'" style="background:none; border:none; color:var(--accent); font-size:10px; cursor:pointer; font-weight:800;">EXPORT AUDIT</button>
                 </div>
                 <div id="log-stream"></div>
             </div>
 
-            <section id="tax-center" class="info-section" style="margin-bottom:100px;">
-                <h2 class="card-header">Institutional Compliance</h2>
-                <div style="background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; border-top: 6px solid #2563eb; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);">
-                    <div style="display:flex; gap:40px; align-items:center;">
-                        <div style="flex:1;">
-                            <h3 style="margin-top:0;">1099-DA Automated Reporting</h3>
-                            <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export. VaultLogic bridges the gap between DeFi complexity and corporate accounting standards.</p>
-                        </div>
-                        <div id="taxDisplay" style="width:300px; background:#f8fafc; padding:30px; border-radius:16px; border:1px solid #e2e8f0; text-align:center;">
-                            <p id="taxPrompt" style="color:#94a3b8; font-size:13px; font-style:italic; margin:0;">Awaiting Wallet Sync...</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <script>
                 let activeAddress = null;
-
-                function filterVaults(currency, el) {{
-                    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-                    el.classList.add('active');
-                    document.querySelectorAll('.strategy-card').forEach(card => {{
-                        if (currency === 'ALL' || card.dataset.currency === currency || card.dataset.currency === 'MULTI') {{
-                            card.style.display = 'block';
-                        }} else {{
-                            card.style.display = 'none';
-                        }}
-                    }});
-                }}
 
                 async function connectWallet() {{
                     if (window.ethereum) {{
@@ -223,9 +213,9 @@ async def home(request: Request):
                             const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
                             activeAddress = accounts[0];
                             document.getElementById('connectBtn').style.display = 'none';
-                            document.getElementById('walletDisplay').style.display = 'flex';
-                            document.getElementById('addrText').innerText = activeAddress.substring(0,6) + "..." + activeAddress.substring(38);
-                            document.getElementById('taxPrompt').innerHTML = "<b>Compliance Ready</b><br><small style='color:#059669'>Tax Year 2026 Active</small>";
+                            const disp = document.getElementById('walletDisplay');
+                            disp.style.display = 'block';
+                            disp.innerText = activeAddress.substring(0,6) + "..." + activeAddress.substring(38);
                             
                             await fetch("/connect-wallet", {{
                                 method: "POST",
@@ -236,21 +226,11 @@ async def home(request: Request):
                     }}
                 }}
 
-                async function deployFunds(btn, protocol) {{
-                    if (!activeAddress) {{ alert("Wallet connection required for industrial deployment."); return; }}
-                    btn.innerText = "Securing Path...";
-                    btn.style.background = "#0f172a";
-                    setTimeout(() => {{ 
-                        btn.innerText = "Active & Protected"; 
-                        btn.style.background = "#059669"; 
-                    }}, 1500);
-                }}
-
-                function unlockPrompt() {{
-                    const key = prompt("Institutional Access Key:");
-                    if(key === "cb-institutional") {{
-                        alert("Access Granted. Corporate Dashboard Unlocked.");
-                    }}
+                function deployFunds(btn, protocol) {{
+                    if (!activeAddress) {{ alert("Connection Required"); return; }}
+                    btn.innerText = "EXECUTING...";
+                    btn.disabled = true;
+                    setTimeout(() => {{ btn.innerText = "ACTIVE"; btn.style.background = "#fff"; }}, 2000);
                 }}
 
                 setInterval(async () => {{
@@ -258,7 +238,7 @@ async def home(request: Request):
                         const res = await fetch('/logs');
                         const data = await res.json();
                         const stream = document.getElementById('log-stream');
-                        stream.innerHTML = data.logs.map(l => `<div class="log-entry"><span style="color:#2563eb; margin-right:10px;">></span> ${{l}}</div>`).reverse().join('');
+                        stream.innerHTML = data.logs.map(l => `<div><span style="opacity:0.5; margin-right:10px;">></span> ${{l}}</div>`).reverse().join('');
                     }} catch(e) {{}}
                 }}, 3000);
             </script>
