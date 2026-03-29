@@ -1,14 +1,14 @@
 import asyncio
 import os
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 
 app = FastAPI()
 
 # System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.5.4 Online", "Status: Awaiting Wallet Connection..."]
+system_logs = ["VaultLogic Kernel v2.5.5 Online", "Status: Awaiting Wallet Connection..."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -16,10 +16,10 @@ class WalletConnect(BaseModel):
 def add_log(msg):
     global system_logs
     system_logs.append(msg)
-    if len(system_logs) > 25: system_logs.pop(0)
+    if len(system_logs) > 50: system_logs.pop(0)
 
 async def get_industrial_yields():
-    # These represent the actual live institutional tiers on Base Mainnet
+    # Live institutional tiers on Base Mainnet
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "asset": "STEAK / GT USDCP", "type": "ORGANIC"},
         {"protocol": "AAVE V3", "apy": 2.87, "asset": "USDC", "type": "ORGANIC"},
@@ -32,7 +32,6 @@ async def get_industrial_yields():
 async def connect(data: WalletConnect):
     try:
         from engine import run_alm_engine
-        # Only log 'Disconnected' if specifically requested, otherwise run engine
         if data.address == "DISCONNECT":
             add_log("SYSTEM: Wallet Session Terminated by User.")
             return {"status": "disconnected"}
@@ -46,6 +45,13 @@ async def connect(data: WalletConnect):
 @app.get("/logs")
 async def get_logs():
     return {"logs": system_logs}
+
+@app.get("/download-logs")
+async def download_logs():
+    csv_content = "Timestamp,Event\n"
+    for log in system_logs:
+        csv_content += f"{log}\n"
+    return PlainTextResponse(csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=vaultlogic_audit_log.csv"})
 
 @app.on_event("startup")
 async def startup():
@@ -84,6 +90,7 @@ async def home(request: Request):
                 .header-section {{ padding:40px 20px; border-bottom:1px solid #111; margin-bottom:30px; }}
                 .connect-btn {{ background:#00ffcc; color:#000; border:none; padding:15px 40px; font-weight:bold; cursor:pointer; border-radius: 4px; letter-spacing:1px; transition: 0.3s; font-size:14px; }}
                 .stop-btn {{ background:#330000; color:#ff4444; border:1px solid #ff4444; padding:5px 15px; font-size:10px; cursor:pointer; margin-top:10px; border-radius:3px; text-transform:uppercase; }}
+                .download-link {{ color:#00ffcc; text-decoration:none; font-size:10px; border:1px solid #00ffcc; padding:2px 8px; border-radius:3px; }}
                 #console {{ 
                     max-width:1100px; margin:40px auto; background:#000; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:12px; color:#00ffcc; 
@@ -96,7 +103,7 @@ async def home(request: Request):
         </head>
         <body>
             <div class="header-section">
-                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.4</div>
+                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.5</div>
                 <h1 style="letter-spacing:15px; margin:10px 0; color:#fff;">VAULTLOGIC</h1>
                 <p style="color:#666; margin-bottom:30px; font-size:14px;">Institutional Liquidity Management for Long-Term Trusts</p>
                 
@@ -110,8 +117,9 @@ async def home(request: Request):
             <div class="container">{yield_cards}</div>
 
             <div id="console">
-                <div style="color:#333; margin-bottom:15px; text-transform:uppercase; font-size:10px; font-weight:bold; border-bottom:1px solid #222; padding-bottom:5px;">
-                    Industrial ALM Execution Log (Live)
+                <div style="display:flex; justify-content:space-between; color:#333; margin-bottom:15px; text-transform:uppercase; font-size:10px; font-weight:bold; border-bottom:1px solid #222; padding-bottom:5px;">
+                    <span>Industrial ALM Execution Log (Live)</span>
+                    <a href="/download-logs" class="download-link">DOWNLOAD AUDIT CSV</a>
                 </div>
                 <div id="log-stream"></div>
             </div>
@@ -142,7 +150,6 @@ async def home(request: Request):
                     document.getElementById('walletDisplay').style.display = 'none';
                     document.getElementById('connectBtn').style.display = 'inline-block';
                     document.getElementById('connectBtn').innerText = "CONNECT INSTITUTIONAL WALLET";
-                    
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
