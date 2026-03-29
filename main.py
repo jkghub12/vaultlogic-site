@@ -60,8 +60,8 @@ async def start_engine(data: EngineInit):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # Note: Using double braces {{ }} for CSS/JS to escape f-string interpretation
-    return f"""
+    # Using a standard string to avoid f-string curly brace conflicts with CSS/JS
+    html_content = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -71,25 +71,25 @@ async def home(request: Request):
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script type="module">
-        import {{ createAppKit }} from 'https://esm.sh/@reown/appkit'
-        import {{ Ethers5Adapter }} from 'https://esm.sh/@reown/appkit-adapter-ethers5'
-        import {{ base }} from 'https://esm.sh/@reown/appkit/networks'
+        import { createAppKit } from 'https://esm.sh/@reown/appkit'
+        import { Ethers5Adapter } from 'https://esm.sh/@reown/appkit-adapter-ethers5'
+        import { base } from 'https://esm.sh/@reown/appkit/networks'
 
-        const modal = createAppKit({{
+        const modal = createAppKit({
             adapters: [new Ethers5Adapter()],
             networks: [base],
             projectId: '2b936cf692d84ae6da1ba91950c96420',
             themeMode: 'dark',
-            features: {{ analytics: true, email: false, socials: false }}
-        }});
+            features: { analytics: true, email: false, socials: false }
+        });
         window.modal = modal;
 
-        modal.subscribeAccount(state => {{
+        modal.subscribeAccount(state => {
             const dashboard = document.getElementById('dashboard');
             const connectBtn = document.getElementById('connectBtn');
             const connectionStatus = document.getElementById('connectionStatus');
             
-            if(state.isConnected && state.address) {{
+            if(state.isConnected && state.address) {
                 window.userAddress = state.address;
                 dashboard.classList.remove('opacity-40', 'pointer-events-none');
                 connectBtn.innerText = "OPEN WALLET";
@@ -97,9 +97,9 @@ async def home(request: Request):
                 connectBtn.classList.add('bg-slate-800');
                 connectionStatus.innerHTML = `
                     <span class="w-2 h-2 bg-emerald-500 rounded-full status-pulse"></span>
-                    <span class="text-sm font-medium text-emerald-400 uppercase tracking-tighter">AUTH: ${{state.address.slice(0,6)}}...${{state.address.slice(-4)}}</span>
+                    <span class="text-sm font-medium text-emerald-400 uppercase tracking-tighter">AUTH: ${state.address.slice(0,6)}...${state.address.slice(-4)}</span>
                 `;
-            }} else {{
+            } else {
                 window.userAddress = null;
                 dashboard.classList.add('opacity-40', 'pointer-events-none');
                 connectBtn.innerText = "AUTHENTICATE";
@@ -109,22 +109,22 @@ async def home(request: Request):
                     <span class="w-2 h-2 bg-sky-500 rounded-full status-pulse"></span>
                     <span class="text-sm font-medium text-sky-400">CONNECTING TO BASE...</span>
                 `;
-            }}
-        }});
+            }
+        });
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
-        body {{ background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }}
-        .mono {{ font-family: 'JetBrains Mono', monospace; }}
-        .glass-panel {{ background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }}
-        .kernel-glow {{ box-shadow: 0 0 20px rgba(56, 189, 248, 0.15); }}
-        .log-entry {{ border-left: 2px solid #334155; transition: all 0.2s; }}
-        .log-entry:hover {{ border-left-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }}
-        @keyframes pulse-slow {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} }}
-        .status-pulse {{ animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }}
-        .custom-scrollbar::-webkit-scrollbar {{ width: 4px; }}
-        .custom-scrollbar::-webkit-scrollbar-track {{ background: #0f172a; }}
-        .custom-scrollbar::-webkit-scrollbar-thumb {{ background: #334155; border-radius: 10px; }}
+        body { background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .kernel-glow { box-shadow: 0 0 20px rgba(56, 189, 248, 0.15); }
+        .log-entry { border-left: 2px solid #334155; transition: all 0.2s; }
+        .log-entry:hover { border-left-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-pulse { animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -209,7 +209,7 @@ async def home(request: Request):
     </main>
 
     <script>
-        async function verifyAndStart() {{
+        async function verifyAndStart() {
             const amt = document.getElementById('alloc-amt').value;
             const btn = document.getElementById('verify-btn');
             const simMsg = document.getElementById('sim-msg');
@@ -217,46 +217,47 @@ async def home(request: Request):
             btn.innerText = "AUDITING...";
             btn.disabled = true;
             
-            try {{
-                const vRes = await fetch('/verify-balance', {{
+            try {
+                const vRes = await fetch('/verify-balance', {
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{ address: window.userAddress, amount: parseFloat(amt) }})
-                }});
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ address: window.userAddress, amount: parseFloat(amt) })
+                });
                 const vData = await vRes.json();
                 
-                if(vData.status === 'simulation') {{
+                if(vData.status === 'simulation') {
                     simMsg.classList.remove('hidden');
-                }}
+                }
                 
-                await fetch('/start-engine', {{
+                await fetch('/start-engine', {
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{ address: window.userAddress, amount: parseFloat(amt) }})
-                }});
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ address: window.userAddress, amount: parseFloat(amt) })
+                });
                 
                 btn.innerText = "ALLOCATION ACTIVE";
                 btn.classList.add('bg-emerald-500', 'text-white');
-            }} catch(e) {{
+            } catch(e) {
                 btn.innerText = "CONFIRM ALLOCATION";
                 btn.disabled = false;
-            }}
-        }}
+            }
+        }
 
-        setInterval(async () => {{
-            try {{
+        setInterval(async () => {
+            try {
                 const res = await fetch('/logs');
                 const data = await res.json();
                 const logOutput = document.getElementById('logOutput');
                 logOutput.innerHTML = data.logs.map(l => `
                     <div class="log-entry p-2 rounded bg-slate-900/40 border border-white/5">
                         <span class="text-slate-500 font-bold">[SYS]</span> 
-                        <span class="text-slate-300 font-medium">${{l}}</span>
+                        <span class="text-slate-300 font-medium">${l}</span>
                     </div>
                 `).reverse().join('');
-            } catch(e) {{}}
-        }}, 2500);
+            } catch(e) {}
+        }, 2500);
     </script>
 </body>
 </html>
-    """
+"""
+    return html_content
