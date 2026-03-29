@@ -93,7 +93,7 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Global ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <!-- WalletConnect AppKit (The Gold Standard for Mobile Discovery) -->
+            <!-- Reown AppKit Configuration -->
             <script type="module">
                 import {{ createAppKit }} from 'https://esm.sh/@reown/appkit'
                 import {{ Ethers5Adapter }} from 'https://esm.sh/@reown/appkit-adapter-ethers5'
@@ -106,7 +106,18 @@ async def home(request: Request):
                     networks: [base],
                     projectId,
                     themeMode: 'light',
-                    features: {{ analytics: true }},
+                    featuredWalletIds: [
+                        'fd20dc426fb37566d803205b19bbc1d4096b248ac04547e3cfb6b3a38bd033aa', // Coinbase Wallet
+                        'c57ca71047597b42ddc9d30d30569074b83049102b4d8f5a62e399580577b30c', // MetaMask
+                        '4622a2b2d6af1c9844944291e5e7351a6aaad53059ba587f21f0089e7a159176'  // Binance
+                    ],
+                    metadata: {{
+                        name: 'VaultLogic',
+                        description: 'Institutional ALM on Base',
+                        url: window.location.origin,
+                        icons: ['https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png']
+                    }},
+                    features: {{ analytics: true, email: false, social: false }},
                     themeVariables: {{ '--w3m-accent': '#2563eb', '--w3m-border-radius-master': '10px' }}
                 }});
 
@@ -131,7 +142,7 @@ async def home(request: Request):
                 .nav-links a {{ text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; transition: color 0.2s; }}
                 .nav-links a:hover {{ color: #2563eb; }}
                 
-                .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; }}
+                .hero-section {{ padding: 80px 20px; background: white; border-bottom: 1px solid #e2e8f0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
                 .strategy-card {{ background:#fff; padding:30px; border-radius:16px; border:1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:left; position: relative; transition: all 0.4s ease; overflow: hidden; }}
                 .strategy-card:hover {{ transform: translateY(-8px); border-color: #2563eb; }}
@@ -153,13 +164,14 @@ async def home(request: Request):
                 .inst-btn {{ background:transparent; border:1px solid #e2e8f0; color:#0f172a; padding:12px 20px; border-radius:10px; font-weight:700; cursor:pointer; font-size:14px; }}
                 
                 .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:2000; justify-content:center; align-items:center; }}
-                .modal-content {{ max-width: 800px; text-align: left; padding: 40px; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }}
+                .modal-content {{ max-width: 600px; width: 90%; text-align: left; padding: 40px; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); background: white; }}
 
                 @media (max-width: 768px) {{
-                    .top-nav {{ padding: 15px 20px; flex-direction: column; gap: 15px; }}
+                    .top-nav {{ padding: 15px 20px; flex-direction: column; gap: 15px; position: relative; }}
                     .nav-links {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }}
                     .nav-links a {{ margin-left: 0; padding: 5px 10px; }}
                     .logo-text {{ font-size: 16px; }}
+                    .hero-section h1 {{ font-size: 36px; }}
                 }}
             </style>
         </head>
@@ -173,8 +185,8 @@ async def home(request: Request):
                     <a onclick="toggleModal('aboutModal', true)">About</a>
                     <a href="#strategies">Strategies</a>
                     <a onclick="toggleModal('complianceModal', true)">Compliance</a>
-                    <button class="inst-btn" onclick="toggleModal('loginModal', true)">Institutional Login</button>
-                    <button id="connectBtn" class="connect-btn" onclick="window.modal.open()">Connect Wallet</button>
+                    <button class="inst-btn" onclick="toggleModal('loginModal', true)">Inst. Login</button>
+                    <button id="connectBtn" class="connect-btn" onclick="window.modal.open()">Connect</button>
                     <div id="walletDisplay" style="display:none; align-items:center; flex-direction:column; gap:5px;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b;"></span>
                         <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:4px 12px; font-size:10px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Stop Engine</button>
@@ -183,38 +195,39 @@ async def home(request: Request):
             </nav>
 
             <!-- MODALS -->
-            <div id="aboutModal" class="modal-overlay">
-                <div class="modal-content">
-                    <button onclick="toggleModal('aboutModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
-                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Industrial Trust</h2>
-                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides automated Asset-Liability Management (ALM) for institutional treasuries. We prioritize principal protection and predictable yield over high-risk speculation.</p>
+            <div id="aboutModal" class="modal-overlay" onclick="toggleModal('aboutModal', false)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <h2 style="font-size: 28px; font-weight: 800; color: #0f172a;">Industrial Trust</h2>
+                    <p style="font-size: 16px; color: #64748b; line-height: 1.6;">VaultLogic provides automated Asset-Liability Management (ALM) for institutional treasuries. We prioritize principal protection and predictable yield over high-risk speculation.</p>
+                    <button onclick="toggleModal('aboutModal', false)" style="width:100%; margin-top:20px; padding:12px; background:#f1f5f9; border:none; border-radius:8px; cursor:pointer; font-weight:700;">Dismiss</button>
                 </div>
             </div>
 
-            <div id="complianceModal" class="modal-overlay">
-                <div class="modal-content">
-                    <button onclick="toggleModal('complianceModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
-                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Compliance Center</h2>
-                    <p style="color: #64748b;">Download your audit logs and tax reports below.</p>
-                    <div style="margin-top: 20px; display:flex; gap:10px;">
-                        <button onclick="location.href='/download-logs'" style="background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; cursor:pointer;">Download Audit CSV</button>
+            <div id="complianceModal" class="modal-overlay" onclick="toggleModal('complianceModal', false)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <h2 style="font-size: 28px; font-weight: 800; color: #0f172a;">Compliance Center</h2>
+                    <p style="color: #64748b;">Download your audit logs and tax reports below for institutional reporting.</p>
+                    <div style="margin-top: 20px; display:flex; flex-direction:column; gap:10px;">
+                        <button onclick="location.href='/download-logs'" style="background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; cursor:pointer; font-weight:700;">Download Audit CSV</button>
+                        <button onclick="toggleModal('complianceModal', false)" style="padding:12px; background:#f1f5f9; border:none; border-radius:8px; cursor:pointer;">Close</button>
                     </div>
                 </div>
             </div>
 
-            <div id="loginModal" class="modal-overlay">
-                <div class="modal-content" style="width: 400px; text-align:center;">
-                    <button onclick="toggleModal('loginModal', false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
-                    <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top:40px;">Institutional Access</h2>
-                    <input type="password" placeholder="Enter System Key" style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:10px; margin: 20px 0;">
-                    <button onclick="alert('Demo Mode: Please connect wallet instead.')" style="width:100%; background:#2563eb; color:white; padding:15px; border:none; border-radius:10px; font-weight:700; cursor:pointer;">Authenticate</button>
+            <div id="loginModal" class="modal-overlay" onclick="toggleModal('loginModal', false)">
+                <div class="modal-content" style="width: 350px; text-align:center;" onclick="event.stopPropagation()">
+                    <h2 style="font-size: 22px; font-weight: 800; color: #0f172a;">Institutional Login</h2>
+                    <p style="font-size:12px; color:#64748b; margin-bottom:20px;">Secure Key Authentication</p>
+                    <input type="password" placeholder="System Key" style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom: 15px; box-sizing: border-box;">
+                    <button onclick="alert('Access Restricted: Demo active. Please connect via Wallet.')" style="width:100%; background:#2563eb; color:white; padding:15px; border:none; border-radius:10px; font-weight:700; cursor:pointer; margin-bottom:10px;">Authenticate</button>
+                    <button onclick="toggleModal('loginModal', false)" style="width:100%; padding:10px; background:none; border:none; color:#94a3b8; cursor:pointer;">Cancel</button>
                 </div>
             </div>
 
             <div class="hero-section">
-                <h1 style="font-weight:800; color:#0f172a; margin:10px 0; line-height:1.1; font-size:56px;">Global Treasury.<br>Automated Alpha.</h1>
-                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:17px; padding: 0 10px;">Sophisticated yield management for digital assets. Built for longevity.</p>
-                <button onclick="window.modal.open()" class="initiate-btn" style="background:#2563eb; color:white; padding:18px 45px; border:none; border-radius:12px; font-weight:800; font-size:18px; cursor:pointer;">Initiate Engine</button>
+                <h1 style="font-weight:800; color:#0f172a; margin:10px 0; line-height:1.1; font-size:52px;">Global Treasury.<br>Automated Alpha.</h1>
+                <p style="color:#64748b; max-width:600px; margin:25px auto 30px; font-size:16px; padding: 0 10px;">Industrial-grade yield management for digital assets. Optimized for the Base network.</p>
+                <button onclick="window.modal.open()" class="initiate-btn" style="background:#2563eb; color:white; padding:18px 45px; border:none; border-radius:12px; font-weight:800; font-size:18px; cursor:pointer; transition:transform 0.1s active;">Initiate ALM Engine</button>
             </div>
 
             <div class="filter-bar">
@@ -226,6 +239,10 @@ async def home(request: Request):
             <div id="strategies" class="container">{yield_cards}</div>
 
             <div id="console">
+                <div style="background:#1e293b; padding:10px 20px; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#94a3b8; font-size:10px; font-weight:800; letter-spacing:1px;">SYSTEM EVENT LOG</span>
+                    <span style="color:#34d399; font-size:10px; font-weight:800;">LIVE UPDATES ON</span>
+                </div>
                 <div id="log-stream"></div>
             </div>
 
@@ -272,7 +289,7 @@ async def home(request: Request):
                         const res = await fetch('/logs');
                         const data = await res.json();
                         const stream = document.getElementById('log-stream');
-                        stream.innerHTML = data.logs.map(l => `<div style="padding:5px 0; border-bottom:1px solid #1e293b; color:#94a3b8;">> ${{l}}</div>`).reverse().join('');
+                        stream.innerHTML = data.logs.map(l => `<div style="padding:8px 0; border-bottom:1px solid #1e293b; color:#94a3b8; line-height:1.4;">> ${{l}}</div>`).reverse().join('');
                     }} catch(e) {{}}
                 }}, 3000);
             </script>
