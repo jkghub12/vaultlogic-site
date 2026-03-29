@@ -8,7 +8,7 @@ app = FastAPI()
 
 # System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.5.9 Online", "Status: AI Predictive Engine Engaged.", "Log: Neural pathing active for Multi-Currency pairs."]
+system_logs = ["VaultLogic Kernel v2.5.7 Online", "Status: AI Predictive Engine Engaged.", "Log: Neural pathing active for Multi-Currency pairs."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -98,12 +98,12 @@ async def home(request: Request):
                 .top-nav {{ background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
                 .logo-container {{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }}
                 .logo-img {{ height: 36px; width: auto; border-radius: 4px; }}
+                .logo-fallback {{ display: none; background: #0f172a; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 14px; }}
                 .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
                 
                 .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
                 
                 .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; }}
-                
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
                 .strategy-card {{ background:#fff; padding:30px; border-radius:16px; border:1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:left; position: relative; transition: all 0.4s ease; overflow: hidden; }}
                 .strategy-card:hover {{ transform: translateY(-8px); border-color: #2563eb; }}
@@ -123,13 +123,15 @@ async def home(request: Request):
                 #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; text-align: left; }}
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
-                
-                .compliance-card {{ background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; text-align: left; display: flex; gap: 40px; align-items: center; margin-bottom: 40px; }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo-container">
+                    <img id="vlLogoImg" src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" 
+                         onerror="document.getElementById('vlLogoImg').style.display='none'; document.getElementById('vlLogoFallback').style.display='block';" 
+                         class="logo-img" alt="VaultLogic">
+                    <div id="vlLogoFallback" class="logo-fallback">VL</div>
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
@@ -146,13 +148,13 @@ async def home(request: Request):
             </nav>
 
             <div class="hero-section">
-                <div style="font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800;">Kernel v2.5.9 • Industrial ALM</div>
+                <div style="font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800;">Kernel v2.5.7 • Industrial ALM</div>
                 <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
                 <p style="color:#64748b; max-width:650px; margin:25px auto 45px; font-size:19px;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability.</p>
                 <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
             </div>
 
-            <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0;">
+            <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0; text-align: left;">
                 <h2 style="font-size: 32px; font-weight: 800;">Our Mission</h2>
                 <p style="font-size: 18px; color: #64748b;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
             </section>
@@ -174,13 +176,13 @@ async def home(request: Request):
             </div>
 
             <section id="tax-center" style="padding: 80px 20px; max-width: 1200px; margin: auto;">
-                <div class="compliance-card">
+                <div style="background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; text-align: left; display: flex; gap: 40px; align-items: center;">
                     <div style="flex: 1;">
                         <h2 style="margin-top: 0;">Institutional Compliance</h2>
                         <h3 style="color:#2563eb;">1099-DA Automated Reporting</h3>
                         <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export. VaultLogic bridges the gap between DeFi complexity and corporate accounting standards.</p>
                     </div>
-                    <div style="width: 300px; background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; text-align: center;">
+                    <div id="taxDisplay" style="width: 300px; background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; text-align: center;">
                         <p id="taxPrompt" style="color: #94a3b8; font-size: 13px; font-style: italic; margin: 0;">Awaiting Wallet Sync...</p>
                     </div>
                 </div>
@@ -231,16 +233,21 @@ async def home(request: Request):
                     if(key === "cb-institutional") {{
                         alert("Access Granted. Loading Private Pitch...");
                         document.body.innerHTML += `
-                            <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; z-index:9999; padding:100px; overflow-y:auto;">
-                                <button onclick="location.reload()" style="position:absolute; right:50px; top:50px; color:white; background:none; border:1px solid white; padding:10px;">Close</button>
-                                <h1>VaultLogic Industrial ALM Pitch</h1>
+                            <div id="pitchOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); color:white; z-index:9999; padding:100px; overflow-y:auto; text-align:left;">
+                                <button onclick="document.getElementById('pitchOverlay').remove()" style="position:absolute; right:50px; top:50px; color:white; background:none; border:1px solid white; padding:10px; cursor:pointer;">Close</button>
+                                <h1 style="color:#2563eb;">VaultLogic Industrial ALM Pitch</h1>
                                 <h2>Target: Coinbase Asset Management</h2>
-                                <p>VaultLogic acts as the "autopilot" for institutional treasuries, managing Dynamic Tick Placement and Volatility Hedging automatically.</p>
-                                <ul>
-                                    <li> Dynamic Tick Management for Uniswap V3</li>
-                                    <li> Volatility Hedging via Real-time IV</li>
-                                    <li> Multi-Protocol Aggregation</li>
-                                </ul>
+                                <p style="font-size:20px; opacity:0.8;">The "Autopilot" for institutional treasuries.</p>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:40px; margin-top:40px;">
+                                    <div>
+                                        <h3>Dynamic Tick Management</h3>
+                                        <p>Automated liquidity re-centering for Uniswap V3 based on volatility corridors.</p>
+                                    </div>
+                                    <div>
+                                        <h3>Principal Protection</h3>
+                                        <p>Real-time hedging using integrated options markets to floor downside risk.</p>
+                                    </div>
+                                </div>
                             </div>`;
                     }}
                 }}
