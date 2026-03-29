@@ -93,6 +93,8 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Global ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <!-- Modern Wallet Connection Library -->
+            <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@3.7.1/dist/index.js"></script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
                 body {{ background:#f8fafc; color:#1e293b; font-family: 'Inter', sans-serif; text-align:center; padding:0; margin:0; line-height:1.6; scroll-behavior: smooth; }}
@@ -100,7 +102,6 @@ async def home(request: Request):
                 .top-nav {{ background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
                 .logo-container {{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }}
                 .logo-img {{ height: 36px; width: auto; border-radius: 4px; }}
-                .logo-fallback {{ display: none; background: #0f172a; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 14px; }}
                 .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
                 
                 .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
@@ -121,7 +122,6 @@ async def home(request: Request):
                 .filter-pill.active {{ background: #0f172a; color: white; border-color: #0f172a; }}
 
                 #console {{ max-width:1160px; margin:40px auto; background:#0f172a; border-radius:16px; overflow:hidden; }}
-                .console-header {{ background: #1e293b; padding: 18px 25px; display:flex; justify-content:space-between; align-items:center; }}
                 #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; text-align: left; }}
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
@@ -130,36 +130,26 @@ async def home(request: Request):
                 #aboutModal {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:2000; justify-content:center; align-items:center; }}
                 .modal-content {{ max-width: 800px; text-align: left; padding: 40px; }}
 
-                /* MOBILE RESPONSIVE OVERRIDES */
                 @media (max-width: 768px) {{
                     .top-nav {{ padding: 15px 20px; flex-direction: column; gap: 15px; }}
                     .nav-links {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }}
                     .nav-links a {{ margin-left: 0; padding: 5px 10px; font-weight: 400; color: #94a3b8; font-size: 12px; }}
                     .logo-text {{ font-size: 16px; }}
-                    .hero-section h1 {{ font-size: 38px; letter-spacing: -1px; }}
-                    .hero-section {{ padding: 60px 20px; }}
+                    .hero-section h1 {{ font-size: 38px; }}
                     .initiate-btn {{ width: 100%; }}
-                    .hero-section div {{ flex-direction: column; width: 100%; }}
-                    .connect-btn {{ width: 100%; margin-top: 10px !important; }}
-                    .strategy-card {{ padding: 20px; }}
-                    .modal-content {{ padding: 20px; width: 90%; }}
                 }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo-container">
-                    <img id="vlLogoImg" src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" 
-                         onerror="document.getElementById('vlLogoImg').style.display='none'; document.getElementById('vlLogoFallback').style.display='block';" 
-                         class="logo-img" alt="VaultLogic">
-                    <div id="vlLogoFallback" class="logo-fallback">VL</div>
+                    <img id="vlLogoImg" src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" class="logo-img" alt="VaultLogic">
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
                     <a onclick="toggleAbout(true)">About</a>
                     <a href="#strategies">Strategies</a>
                     <a href="#tax-center">Compliance</a>
-                    <a onclick="unlockPrompt()" style="color:#2563eb; cursor:pointer;">Institutional Login</a>
                     <button id="connectBtn" class="connect-btn" onclick="connectWallet()">Connect Wallet</button>
                     <div id="walletDisplay" style="display:none; align-items:center; flex-direction:column; gap:5px;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b;"></span>
@@ -172,18 +162,14 @@ async def home(request: Request):
                 <div class="modal-content">
                     <button onclick="toggleAbout(false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
                     <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Our Mission</h2>
-                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides high-performance, automated <b>Asset-Liability Management</b> for institutional liquidity. We focus on Capital Efficiency and Risk-Adjusted Yield.</p>
+                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">Industrial Asset-Liability Management on Base. Built for Institutional Stability.</p>
                 </div>
             </div>
 
             <div class="hero-section">
-                <div style="font-size:10px; color:#2563eb; background:#eff6ff; padding:5px 12px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800; text-transform:uppercase; letter-spacing:1px;">Kernel v2.5.7</div>
                 <h1 style="font-weight:800; color:#0f172a; margin:10px 0; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
-                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:17px; padding: 0 10px;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for stability.</p>
-                <div style="display: flex; gap: 15px; justify-content: center; align-items: center; max-width: 400px; margin: auto;">
-                    <button onclick="initiateEngine(this)" class="initiate-btn">Initiate Engine</button>
-                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn" style="margin-top:20px; height: 50px;">Analyze Vaults</button>
-                </div>
+                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:17px; padding: 0 10px;">Sophisticated yield management for USDC and EURC.</p>
+                <button onclick="initiateEngine(this)" class="initiate-btn">Initiate Engine</button>
             </div>
 
             <div class="filter-bar">
@@ -195,24 +181,57 @@ async def home(request: Request):
             <div id="strategies" class="container">{yield_cards}</div>
 
             <div id="console">
-                <div class="console-header">
-                    <span style="font-weight:800; font-size:10px; color:#94a3b8; letter-spacing:1px;">AUDIT STREAM</span>
-                </div>
                 <div id="log-stream"></div>
             </div>
 
-            <section id="tax-center" style="padding: 40px 20px; max-width: 1200px; margin: auto;">
-                <div style="background: white; border: 1px solid #e2e8f0; padding: 30px; border-radius: 20px; text-align: left; display: flex; flex-direction: column; gap: 20px;">
-                    <h2 style="margin: 0; font-size: 22px;">Compliance Center</h2>
-                    <p style="color: #64748b; font-size: 14px; margin: 0;">Automated 1099-DA fiscal logging active.</p>
-                    <div id="taxDisplay" style="background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">
-                        <p id="taxPrompt" style="color: #94a3b8; font-size: 12px; margin: 0;">Awaiting Sync...</p>
-                    </div>
-                </div>
-            </section>
-
             <script>
                 let activeAddress = null;
+
+                // --- NEW ROBUST CONNECTION LOGIC ---
+                async function connectWallet() {{
+                    const connectBtn = document.getElementById('connectBtn');
+                    connectBtn.innerText = "Requesting Access...";
+
+                    // 1. Check for MetaMask/Browser Extension
+                    if (window.ethereum) {{
+                        try {{
+                            const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
+                            setupWalletUI(accounts[0]);
+                            return;
+                        }} catch (err) {{
+                            console.error("Browser wallet rejected", err);
+                        }}
+                    }}
+
+                    // 2. Fallback: Coinbase Wallet SDK (Works on Mobile Safari/Chrome)
+                    try {{
+                        const coinbaseWallet = new CoinbaseWalletSDK({{
+                            appName: "VaultLogic",
+                            appLogoUrl: "https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png",
+                            darkMode: false
+                        }});
+                        const ethereum = coinbaseWallet.makeWeb3Provider("https://mainnet.base.org", 8453);
+                        const accounts = await ethereum.request({{ method: 'eth_requestAccounts' }});
+                        setupWalletUI(accounts[0]);
+                    }} catch (err) {{
+                        connectBtn.innerText = "Connection Failed";
+                        setTimeout(() => connectBtn.innerText = "Connect Wallet", 2000);
+                        alert("No wallet found. Please install Coinbase Wallet or MetaMask.");
+                    }}
+                }}
+
+                function setupWalletUI(address) {{
+                    activeAddress = address;
+                    document.getElementById('connectBtn').style.display = 'none';
+                    document.getElementById('walletDisplay').style.display = 'flex';
+                    document.getElementById('addrText').innerText = address.substring(0,6) + "..." + address.substring(38);
+                    
+                    fetch("/connect-wallet", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        body: JSON.stringify({{ address: address }})
+                    }});
+                }}
 
                 function toggleAbout(show) {{
                     document.getElementById('aboutModal').style.display = show ? 'flex' : 'none';
@@ -230,27 +249,11 @@ async def home(request: Request):
                     }});
                 }}
 
-                async function connectWallet() {{
-                    if (window.ethereum) {{
-                        try {{
-                            const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
-                            activeAddress = accounts[0];
-                            document.getElementById('connectBtn').style.display = 'none';
-                            document.getElementById('walletDisplay').style.display = 'flex';
-                            document.getElementById('addrText').innerText = activeAddress.substring(0,6) + "..." + activeAddress.substring(38);
-                            document.getElementById('taxPrompt').innerHTML = "<b>Compliance Ready</b>";
-                            
-                            await fetch("/connect-wallet", {{
-                                method: "POST",
-                                headers: {{ "Content-Type": "application/json" }},
-                                body: JSON.stringify({{ address: activeAddress }})
-                            }});
-                        }} catch (err) {{ console.error(err); }}
-                    }}
-                }}
-
                 async function initiateEngine(btn) {{
-                    if (!activeAddress) {{ alert("Connect wallet first."); return; }}
+                    if (!activeAddress) {{ 
+                        connectWallet();
+                        return; 
+                    }}
                     btn.innerText = "Engine Engaged...";
                     btn.style.background = "#059669";
                     await fetch("/connect-wallet", {{
@@ -261,31 +264,9 @@ async def home(request: Request):
                 }}
 
                 async function deployFunds(btn, protocol) {{
-                    if (!activeAddress) {{ alert("Connect wallet first."); return; }}
+                    if (!activeAddress) {{ connectWallet(); return; }}
                     btn.innerText = "Securing Path...";
                     setTimeout(() => {{ btn.innerText = "Active"; btn.style.background = "#059669"; }}, 1000);
-                }}
-
-                function unlockPrompt() {{
-                    const key = prompt("Institutional Access Key:");
-                    if(key === "cb-institutional") {{
-                        const overlay = document.createElement('div');
-                        overlay.id = "pitchOverlay";
-                        overlay.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.98); color:white; z-index:9999; padding:40px 20px; overflow-y:auto; text-align:left;";
-                        overlay.innerHTML = `
-                            <div style="max-width: 900px; margin: auto;">
-                                <button onclick="document.getElementById('pitchOverlay').remove()" style="float:right; color:white; background:none; border:1px solid rgba(255,255,255,0.3); padding:8px 15px; cursor:pointer; border-radius:8px;">Close</button>
-                                <h1 style="color:#3b82f6; font-size: 28px;">VaultLogic Briefing</h1>
-                                <p style="opacity: 0.7;">Private Partner Access</p>
-                                <div style="margin-top:30px;">
-                                    <h3 style="color:#3b82f6;">Dynamic ALM</h3>
-                                    <p style="opacity: 0.9; font-size: 14px;">Automated position management on Base.</p>
-                                    <h3 style="color:#3b82f6; margin-top:20px;">Safe Custody</h3>
-                                    <p style="opacity: 0.9; font-size: 14px;">Non-custodial institutional architecture.</p>
-                                </div>
-                            </div>`;
-                        document.body.appendChild(overlay);
-                    }} else {{ alert("Access Denied."); }}
                 }}
 
                 setInterval(async () => {{
