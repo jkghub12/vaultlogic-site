@@ -93,8 +93,32 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Global ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <!-- Modern Wallet Connection Library -->
-            <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@3.7.1/dist/index.js"></script>
+            <!-- WalletConnect AppKit (The Gold Standard for Mobile Discovery) -->
+            <script type="module">
+                import {{ createAppKit }} from 'https://esm.sh/@reown/appkit'
+                import {{ Ethers5Adapter }} from 'https://esm.sh/@reown/appkit-adapter-ethers5'
+                import {{ base }} from 'https://esm.sh/@reown/appkit/networks'
+
+                const projectId = '2b936cf692d84ae6da1ba91950c96420';
+
+                const modal = createAppKit({{
+                    adapters: [new Ethers5Adapter()],
+                    networks: [base],
+                    projectId,
+                    themeMode: 'light',
+                    features: {{ analytics: true }},
+                    themeVariables: {{ '--w3m-accent': '#2563eb', '--w3m-border-radius-master': '10px' }}
+                }});
+
+                window.modal = modal;
+
+                // Sync connection status with our backend
+                modal.subscribeAccount(state => {{
+                    if (state.isConnected && state.address) {{
+                        setupWalletUI(state.address);
+                    }}
+                }});
+            </script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
                 body {{ background:#f8fafc; color:#1e293b; font-family: 'Inter', sans-serif; text-align:center; padding:0; margin:0; line-height:1.6; scroll-behavior: smooth; }}
@@ -150,7 +174,7 @@ async def home(request: Request):
                     <a onclick="toggleAbout(true)">About</a>
                     <a href="#strategies">Strategies</a>
                     <a href="#tax-center">Compliance</a>
-                    <button id="connectBtn" class="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+                    <button id="connectBtn" class="connect-btn" onclick="window.modal.open()">Connect Wallet</button>
                     <div id="walletDisplay" style="display:none; align-items:center; flex-direction:column; gap:5px;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b;"></span>
                         <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:4px 12px; font-size:10px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Stop Engine</button>
@@ -187,39 +211,6 @@ async def home(request: Request):
             <script>
                 let activeAddress = null;
 
-                // --- NEW ROBUST CONNECTION LOGIC ---
-                async function connectWallet() {{
-                    const connectBtn = document.getElementById('connectBtn');
-                    connectBtn.innerText = "Requesting Access...";
-
-                    // 1. Check for MetaMask/Browser Extension
-                    if (window.ethereum) {{
-                        try {{
-                            const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
-                            setupWalletUI(accounts[0]);
-                            return;
-                        }} catch (err) {{
-                            console.error("Browser wallet rejected", err);
-                        }}
-                    }}
-
-                    // 2. Fallback: Coinbase Wallet SDK (Works on Mobile Safari/Chrome)
-                    try {{
-                        const coinbaseWallet = new CoinbaseWalletSDK({{
-                            appName: "VaultLogic",
-                            appLogoUrl: "https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png",
-                            darkMode: false
-                        }});
-                        const ethereum = coinbaseWallet.makeWeb3Provider("https://mainnet.base.org", 8453);
-                        const accounts = await ethereum.request({{ method: 'eth_requestAccounts' }});
-                        setupWalletUI(accounts[0]);
-                    }} catch (err) {{
-                        connectBtn.innerText = "Connection Failed";
-                        setTimeout(() => connectBtn.innerText = "Connect Wallet", 2000);
-                        alert("No wallet found. Please install Coinbase Wallet or MetaMask.");
-                    }}
-                }}
-
                 function setupWalletUI(address) {{
                     activeAddress = address;
                     document.getElementById('connectBtn').style.display = 'none';
@@ -251,7 +242,7 @@ async def home(request: Request):
 
                 async function initiateEngine(btn) {{
                     if (!activeAddress) {{ 
-                        connectWallet();
+                        window.modal.open();
                         return; 
                     }}
                     btn.innerText = "Engine Engaged...";
@@ -264,7 +255,7 @@ async def home(request: Request):
                 }}
 
                 async function deployFunds(btn, protocol) {{
-                    if (!activeAddress) {{ connectWallet(); return; }}
+                    if (!activeAddress) {{ window.modal.open(); return; }}
                     btn.innerText = "Securing Path...";
                     setTimeout(() => {{ btn.innerText = "Active"; btn.style.background = "#059669"; }}, 1000);
                 }}
