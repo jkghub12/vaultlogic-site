@@ -34,7 +34,6 @@ async def connect(data: WalletConnect):
         if data.address == "DISCONNECT":
             add_log("SYSTEM: Wallet Session Terminated by User.")
             return {"status": "disconnected"}
-        # For System-Led Initiation (Best Path)
         if "INITIATE_SYSTEM" in data.address:
             add_log("SYSTEM: Global Engine Start. Scanning for optimal rebalance path...")
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
@@ -127,7 +126,10 @@ async def home(request: Request):
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
                 .initiate-btn {{ background:#2563eb; border:none; color:white; padding:15px 40px; border-radius:10px; font-weight:800; font-size:16px; cursor:pointer; margin-top: 20px; transition: transform 0.2s; }}
-                .initiate-btn:active {{ transform: scale(0.98); }}
+                
+                /* Modal/Overlay for Mission */
+                #aboutModal {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:2000; justify-content:center; align-items:center; }}
+                .modal-content {{ max-width: 800px; text-align: left; padding: 40px; }}
             </style>
         </head>
         <body>
@@ -140,7 +142,7 @@ async def home(request: Request):
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
-                    <a href="#about">About</a>
+                    <a onclick="toggleAbout(true)">About</a>
                     <a href="#strategies">Strategies</a>
                     <a href="#tax-center">Compliance</a>
                     <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800; cursor:pointer;">Institutional Login</a>
@@ -152,6 +154,14 @@ async def home(request: Request):
                 </div>
             </nav>
 
+            <div id="aboutModal">
+                <div class="modal-content">
+                    <button onclick="toggleAbout(false)" style="float:right; cursor:pointer; background:none; border:1px solid #e2e8f0; padding:5px 15px; border-radius:5px;">Close</button>
+                    <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Our Mission</h2>
+                    <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
+                </div>
+            </div>
+
             <div class="hero-section">
                 <div style="font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800;">Kernel v2.5.7 • Industrial ALM</div>
                 <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
@@ -161,11 +171,6 @@ async def home(request: Request):
                     <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn" style="margin-top:20px; height: 50px;">Analyze Vaults</button>
                 </div>
             </div>
-
-            <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0; text-align: left;">
-                <h2 style="font-size: 32px; font-weight: 800; color: #0f172a;">Our Mission</h2>
-                <p style="font-size: 18px; color: #64748b; line-height: 1.8;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
-            </section>
 
             <div class="filter-bar">
                 <div class="filter-pill active" onclick="filterVaults('ALL', this)">All Opportunities</div>
@@ -188,7 +193,7 @@ async def home(request: Request):
                     <div style="flex: 1;">
                         <h2 style="margin-top: 0;">Institutional Compliance</h2>
                         <h3 style="color:#2563eb;">1099-DA Automated Reporting</h3>
-                        <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export. VaultLogic bridges the gap between DeFi complexity and corporate accounting standards.</p>
+                        <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export.</p>
                     </div>
                     <div id="taxDisplay" style="width: 300px; background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; text-align: center;">
                         <p id="taxPrompt" style="color: #94a3b8; font-size: 13px; font-style: italic; margin: 0;">Awaiting Wallet Sync...</p>
@@ -198,6 +203,10 @@ async def home(request: Request):
 
             <script>
                 let activeAddress = null;
+
+                function toggleAbout(show) {{
+                    document.getElementById('aboutModal').style.display = show ? 'flex' : 'none';
+                }}
 
                 function filterVaults(currency, el) {{
                     document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
@@ -219,7 +228,7 @@ async def home(request: Request):
                             document.getElementById('connectBtn').style.display = 'none';
                             document.getElementById('walletDisplay').style.display = 'flex';
                             document.getElementById('addrText').innerText = activeAddress.substring(0,6) + "..." + activeAddress.substring(38);
-                            document.getElementById('taxPrompt').innerHTML = "<b>Compliance Ready</b><br><small style='color:#059669'>Tax Year 2026 Active</small>";
+                            document.getElementById('taxPrompt').innerHTML = "<b>Compliance Ready</b>";
                             
                             await fetch("/connect-wallet", {{
                                 method: "POST",
@@ -231,14 +240,9 @@ async def home(request: Request):
                 }}
 
                 async function initiateEngine(btn) {{
-                    if (!activeAddress) {{
-                        alert("Wallet must be connected to initiate global engine.");
-                        return;
-                    }}
+                    if (!activeAddress) {{ alert("Wallet must be connected."); return; }}
                     btn.innerText = "Engine Engaged...";
                     btn.style.background = "#059669";
-                    
-                    // Trigger System-Led logic in the backend
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
@@ -261,32 +265,23 @@ async def home(request: Request):
                         overlay.innerHTML = `
                             <div style="max-width: 900px; margin: auto;">
                                 <button onclick="document.getElementById('pitchOverlay').remove()" style="float:right; color:white; background:none; border:1px solid rgba(255,255,255,0.3); padding:8px 20px; cursor:pointer; border-radius:8px;">Close</button>
-                                <h1 style="color:#3b82f6; font-size: 42px; margin-bottom: 10px;">VaultLogic Industrial ALM</h1>
-                                <p style="font-size: 20px; opacity: 0.7; margin-bottom: 40px;">Private Institutional Briefing</p>
-                                
-                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:60px;">
+                                <h1 style="color:#3b82f6; font-size: 42px;">VaultLogic Industrial ALM</h1>
+                                <p style="font-size: 20px; opacity: 0.7;">Private Institutional Briefing</p>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:60px; margin-top:40px;">
                                     <div>
                                         <h3 style="color:#3b82f6;">Dynamic Tick Management</h3>
-                                        <p style="line-height:1.6; opacity: 0.9;">Automatically moves Uniswap V3 liquidity to stay "In-Range" based on real-time price volatility corridors.</p>
-                                        
+                                        <p style="opacity: 0.9;">Automatically moves Uniswap V3 liquidity to stay "In-Range".</p>
                                         <h3 style="color:#3b82f6; margin-top:30px;">Multi-Protocol Aggregation</h3>
-                                        <p style="line-height:1.6; opacity: 0.9;">Monitors Aave, Aerodrome, and Morpho simultaneously to maintain an industrial-grade yield floor.</p>
+                                        <p style="opacity: 0.9;">Monitors Aave, Aerodrome, and Morpho simultaneously.</p>
                                     </div>
                                     <div style="background: rgba(255,255,255,0.05); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
                                         <h4 style="margin-top:0;">Target: Coinbase Asset Management</h4>
-                                        <p style="font-size: 14px; opacity: 0.8;">VaultLogic acts as the "autopilot" for institutional treasuries, managing risk and capital efficiency without manual 24/7 monitoring.</p>
-                                        <ul style="font-size:14px; padding-left:20px; opacity:0.8;">
-                                            <li>Principal Protection Layer (PPL)</li>
-                                            <li>1099-DA Fiscal Compliance Export</li>
-                                            <li>Non-Custodial Architecture</li>
-                                        </ul>
+                                        <p style="font-size: 14px; opacity: 0.8;">The "autopilot" for institutional treasuries.</p>
                                     </div>
                                 </div>
                             </div>`;
                         document.body.appendChild(overlay);
-                    }} else {{
-                        alert("Access Denied.");
-                    }}
+                    }} else {{ alert("Access Denied."); }}
                 }}
 
                 setInterval(async () => {{
