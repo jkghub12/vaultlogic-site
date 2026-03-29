@@ -44,13 +44,11 @@ async def verify_balance(data: EngineInit):
         actual_balance = raw_balance / 10**6
         
         if data.amount > actual_balance:
-            # FALLBACK FOR DEMO: If user has low balance, we allow "Simulation Mode"
             add_log(f"AUDIT: Wallet balance ({actual_balance:.2f}) below request. Entering Simulation.")
             return {"status": "simulation", "message": "Low balance detected. Starting in Simulation Mode."}
             
         return {"status": "success", "balance": actual_balance}
     except Exception:
-        # If RPC fails, we still allow the demo to proceed
         return {"status": "simulation", "message": "RPC Timeout. Starting in Simulation Mode."}
 
 @app.post("/start-engine")
@@ -62,6 +60,7 @@ async def start_engine(data: EngineInit):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    # Note: Using double braces {{ }} for CSS/JS to escape f-string interpretation
     return f"""
 <!DOCTYPE html>
 <html lang="en">
