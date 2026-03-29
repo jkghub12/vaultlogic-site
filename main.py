@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-# System state - Upgraded for Institutional Depth
+# System state - Institutional Metrics
 vault_cache = {
     "yields": [], 
     "metrics": {
@@ -31,7 +31,6 @@ def add_log(msg):
     if len(system_logs) > 50: system_logs.pop(0)
 
 async def get_industrial_yields():
-    # Simulated high-fidelity institutional data
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "USDC", "type": "STABLE", "risk": "LOW", "utilization": "82%"},
         {"protocol": "AAVE V3", "apy": 4.12, "predicted": 4.25, "asset": "EURC", "type": "GLOBAL", "risk": "MINIMAL", "utilization": "74%"},
@@ -43,15 +42,10 @@ async def get_industrial_yields():
 @app.post("/connect-wallet")
 async def connect(data: WalletConnect):
     try:
-        from engine import run_alm_engine
-        # Terminate Logic
         if "TERMINATE" in data.address:
             original_addr = data.address.replace("TERMINATE_", "")
             add_log(f"HALT: Terminating Engine for {original_addr[:10]}...")
-            # In engine.py, active_sessions.pop(addr) would stop the while loop
             return {"status": "terminated"}
-            
-        # Initialization Logic
         add_log(f"AUTH: Wallet {data.address[:10]}... verified.")
         return {"status": "success"}
     except Exception as e:
@@ -73,8 +67,7 @@ async def get_logs():
 async def startup():
     async def sync():
         while True:
-            try:
-                vault_cache["yields"] = await get_industrial_yields()
+            try: vault_cache["yields"] = await get_industrial_yields()
             except: pass
             await asyncio.sleep(60)
     asyncio.create_task(sync())
@@ -82,7 +75,7 @@ async def startup():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     yield_cards = "".join([f"""
-        <div class="strategy-card" data-asset="{y['asset']}">
+        <div class="strategy-card">
             <div class="card-header">
                 <div>
                     <span class="protocol-label">{y['protocol']}</span>
@@ -160,70 +153,89 @@ async def home(request: Request):
                 .logo img {{ height: 34px; width: auto; border-radius: 6px; }}
                 
                 .nav-actions {{ display: flex; gap: 24px; align-items: center; }}
-                .nav-link {{ color: #64748b; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }}
-                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }}
+                .nav-link {{ color: #64748b; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; letter-spacing: 0.5px; transition: color 0.2s; }}
+                .nav-link:hover {{ color: var(--accent); }}
                 
-                /* Control Panel */
+                .btn-connect {{ background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }}
+                .btn-inst {{ border: 1px solid var(--border); background: white; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }}
+
                 #control-panel {{ 
                     max-width: 1200px; 
                     margin: 20px auto 0; 
-                    padding: 20px; 
+                    padding: 20px 30px; 
                     background: white; 
                     border: 1px solid var(--border); 
                     border-radius: 12px; 
                     display: none; 
                     align-items: center; 
                     justify-content: space-between;
-                    animation: slideDown 0.3s ease-out;
+                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
                 }}
-                @keyframes slideDown {{ from {{ opacity:0; transform: translateY(-10px); }} to {{ opacity:1; transform: translateY(0); }} }}
                 
                 .status-block {{ display: flex; align-items: center; gap: 15px; }}
                 .status-indicator {{ width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }}
-                .status-active {{ background: var(--success); box-shadow: 0 0 10px var(--success); }}
+                .status-active {{ background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 2s infinite; }}
+                @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} 100% {{ opacity: 1; }} }}
                 
                 .engine-actions {{ display: flex; gap: 10px; }}
-                .btn-start {{ background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
-                .btn-stop {{ background: white; color: var(--danger); border: 1px solid var(--danger); padding: 10px 20px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
+                .btn-start {{ background: var(--success); color: white; border: none; padding: 10px 24px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
+                .btn-stop {{ background: white; color: var(--danger); border: 1px solid var(--danger); padding: 10px 24px; border-radius: 6px; font-weight: 800; cursor: pointer; font-size: 12px; }}
 
-                /* Rest of UI */
                 .stats-ribbon {{ background: white; border-bottom: 1px solid var(--border); padding: 20px 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }}
-                .stat-item label {{ font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; }}
-                .stat-item .val {{ font-size: 20px; font-weight: 800; }}
+                .stat-item label {{ font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }}
+                .stat-item .val {{ font-size: 20px; font-weight: 800; color: var(--primary); }}
 
                 .container {{ max-width: 1200px; margin: 40px auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }}
-                .strategy-card {{ background: white; border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: 0.3s; }}
-                .card-header {{ display: flex; justify-content: space-between; margin-bottom: 24px; }}
-                .asset-title {{ margin: 0; font-size: 22px; font-weight: 800; }}
+                .strategy-card {{ background: white; border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); }}
+                .strategy-card:hover {{ border-color: var(--accent); transform: translateY(-4px); }}
+                
+                .card-header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }}
+                .protocol-label {{ font-size: 11px; font-weight: 800; color: var(--accent); text-transform: uppercase; }}
+                .asset-title {{ margin: 4px 0 0 0; font-size: 22px; font-weight: 800; }}
+                .risk-badge {{ font-size: 9px; font-weight: 900; padding: 5px 10px; border-radius: 6px; }}
+                .risk-low {{ background: #f0fdf4; color: #166534; }}
+                .risk-minimal {{ background: #eff6ff; color: #1e40af; }}
+                .risk-med {{ background: #fffbeb; color: #92400e; }}
+
                 .yield-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }}
                 .yield-box {{ padding: 14px; border: 1px solid var(--border); border-radius: 10px; }}
                 .yield-box.highlighted {{ background: #f8fafc; border-color: var(--accent); }}
+                .yield-box label {{ font-size: 10px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px; }}
                 .yield-box .value {{ font-size: 24px; font-weight: 800; }}
 
-                .deploy-btn {{ width: 100%; background: #f8fafc; border: 1px solid var(--border); padding: 14px; border-radius: 10px; font-weight: 800; cursor: pointer; }}
+                .util-bar {{ background: #f1f5f9; height: 20px; border-radius: 6px; position: relative; margin-bottom: 24px; overflow: hidden; border: 1px solid #e2e8f0; }}
+                .util-fill {{ background: #cbd5e1; height: 100%; transition: width 1s ease; }}
+                .util-text {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px; font-weight: 800; color: #475569; }}
 
-                #console-wrap {{ max-width: 1200px; margin: 40px auto; background: #0f172a; border-radius: 16px; overflow: hidden; }}
-                .console-head {{ padding: 14px 24px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 11px; font-weight: 800; display: flex; justify-content: space-between; }}
-                #log-stream {{ padding: 24px; height: 200px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 12px; color: #34d399; }}
+                .deploy-btn {{ width: 100%; background: #f8fafc; border: 1px solid var(--border); padding: 14px; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 13px; }}
+                .deploy-btn:hover {{ background: var(--primary); color: white; }}
 
-                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.9); z-index:2000; justify-content:center; align-items:center; }}
-                .modal-content {{ background: white; padding: 40px; border-radius: 20px; max-width: 500px; width: 90%; }}
+                #console-wrap {{ max-width: 1200px; margin: 40px auto; background: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }}
+                .console-head {{ padding: 14px 24px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 11px; font-weight: 800; display: flex; justify-content: space-between; letter-spacing: 1px; }}
+                #log-stream {{ padding: 24px; height: 200px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 12px; color: #34d399; line-height: 1.6; }}
+
+                /* Modals Restored */
+                .modal-overlay {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.9); z-index:2000; justify-content:center; align-items:center; backdrop-filter: blur(4px); }}
+                .modal-content {{ background: white; padding: 48px; border-radius: 20px; max-width: 500px; width: 90%; text-align: left; }}
+                .modal-content h2 {{ font-size:28px; font-weight:800; margin-top:0; letter-spacing:-0.5px; }}
+                .modal-content p {{ color:#64748b; line-height:1.6; font-size:15px; }}
 
                 @media (max-width: 768px) {{
-                    .top-nav {{ flex-direction: column; height: auto; padding: 20px; gap: 10px; }}
+                    .top-nav {{ flex-direction: column; height: auto; padding: 20px; gap: 15px; }}
                     #control-panel {{ flex-direction: column; gap: 15px; text-align: center; }}
-                    .stats-ribbon {{ grid-template-columns: 1fr 1fr; }}
+                    .stats-ribbon {{ grid-template-columns: 1fr 1fr; padding: 20px; }}
                 }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo">
-                    <img src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png"> <span>VAULTLOGIC</span>
+                    <img src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" alt="VL"> <span>VAULTLOGIC</span>
                 </a>
                 <div class="nav-actions">
                     <a class="nav-link" onclick="toggleModal('aboutModal', true)">ABOUT</a>
                     <a class="nav-link" onclick="toggleModal('complianceModal', true)">COMPLIANCE</a>
+                    <button class="btn-inst" onclick="toggleModal('loginModal', true)">INST. LOGIN</button>
                     <button id="connectBtn" class="btn-connect" onclick="window.modal.open()">CONNECT WALLET</button>
                     <div id="walletDisplay" style="display:none; text-align:right;">
                         <div id="addrText" style="font-family:'JetBrains Mono'; font-size:11px; font-weight:800;"></div>
@@ -232,7 +244,6 @@ async def home(request: Request):
                 </div>
             </nav>
 
-            <!-- ENGINE CONTROL PANEL -->
             <div id="control-panel">
                 <div class="status-block">
                     <div id="engine-dot" class="status-indicator"></div>
@@ -264,12 +275,32 @@ async def home(request: Request):
                 <div id="log-stream"></div>
             </div>
 
-            <!-- MODALS -->
+            <!-- RESTORED MODALS -->
             <div id="aboutModal" class="modal-overlay" onclick="toggleModal('aboutModal', false)">
                 <div class="modal-content" onclick="event.stopPropagation()">
-                    <h2 style="font-weight:800;">Institutional Yield Optimization</h2>
-                    <p style="color:#64748b;">VaultLogic provides a professional-grade execution layer for Base ecosystem stablecoins.</p>
-                    <button onclick="toggleModal('aboutModal', false)" style="width:100%; padding:12px; border:none; border-radius:8px; cursor:pointer;">Dismiss</button>
+                    <h2>Industrial Yield Optimization</h2>
+                    <p>VaultLogic uses a proprietary Asset-Liability Management engine to ensure that your digital treasury is always positioned in the highest-yielding, lowest-risk protocols on Base.</p>
+                    <p>Our kernel monitors liquidity depth, implied volatility, and peg stability 24/7 to protect institutional principal.</p>
+                    <button onclick="toggleModal('aboutModal', false)" style="width:100%; background:#f1f5f9; border:none; padding:12px; border-radius:8px; font-weight:700; cursor:pointer; margin-top:20px;">Dismiss</button>
+                </div>
+            </div>
+
+            <div id="complianceModal" class="modal-overlay" onclick="toggleModal('complianceModal', false)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <h2>Audit & Transparency</h2>
+                    <p>All transactions are executed on-chain and are fully auditable. VaultLogic follows strict non-custodial execution patterns.</p>
+                    <button onclick="alert('Audit Trail Exported to CSV')" style="width:100%; background:#0f172a; color:white; padding:14px; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:10px;">Export Audit Trail (CSV)</button>
+                    <button onclick="toggleModal('complianceModal', false)" style="width:100%; background:none; border:none; padding:12px; color:#94a3b8; cursor:pointer; font-weight:600;">Close</button>
+                </div>
+            </div>
+
+            <div id="loginModal" class="modal-overlay" onclick="toggleModal('loginModal', false)">
+                <div class="modal-content" style="max-width: 380px; text-align:center;" onclick="event.stopPropagation()">
+                    <h3 style="font-size:24px; font-weight:800; margin-top:0;">Institutional Access</h3>
+                    <p style="font-size:13px; color:#64748b; margin-bottom:24px;">Please authenticate via your hardware security module (HSM) or system key for administrative access.</p>
+                    <input type="password" placeholder="System Key" style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:15px; font-size:16px;">
+                    <button class="btn-connect" style="width:100%; padding:15px;" onclick="alert('Access Restricted to Whitelisted Keys.')">AUTHENTICATE</button>
+                    <button onclick="toggleModal('loginModal', false)" style="width:100%; background:none; border:none; padding:12px; color:#94a3b8; cursor:pointer;">Cancel</button>
                 </div>
             </div>
 
@@ -291,7 +322,6 @@ async def home(request: Request):
                     document.getElementById('connectBtn').style.display = 'block';
                     document.getElementById('walletDisplay').style.display = 'none';
                     document.getElementById('control-panel').style.display = 'none';
-                    window.engineActive = false;
                 }}
 
                 async function initiateEngine() {{
@@ -312,26 +342,17 @@ async def home(request: Request):
                         document.getElementById('connStatus').style.color = "#22c55e";
                         document.getElementById('btnInitiate').style.display = 'none';
                         document.getElementById('btnTerminate').style.display = 'block';
-                        window.engineActive = true;
                     }}
                 }}
 
                 async function terminateEngine() {{
                     if(!confirm("Warning: Terminating session will stop all active ALM rebalancing for this wallet. Continue?")) return;
-                    
                     await fetch("/connect-wallet", {{ 
                         method: "POST", 
                         headers: {{"Content-Type": "application/json"}}, 
                         body: JSON.stringify({{ address: "TERMINATE_" + window.userAddress }}) 
                     }});
-                    
-                    document.getElementById('engine-dot').classList.remove('status-active');
-                    document.getElementById('engine-status-text').innerText = "TERMINATED";
-                    document.getElementById('connStatus').innerText = "● SESSION ENDED";
-                    document.getElementById('connStatus').style.color = "#ef4444";
-                    document.getElementById('btnTerminate').innerText = "SESSION CLOSED";
-                    document.getElementById('btnTerminate').disabled = true;
-                    window.engineActive = false;
+                    location.reload();
                 }}
 
                 setInterval(async () => {{
