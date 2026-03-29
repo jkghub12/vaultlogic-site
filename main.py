@@ -8,7 +8,7 @@ app = FastAPI()
 
 # System state
 vault_cache = {"yields": [], "status": "SYSTEM READY"}
-system_logs = ["VaultLogic Kernel v2.5.3 Online", "Status: Awaiting Wallet Connection..."]
+system_logs = ["VaultLogic Kernel v2.5.4 Online", "Status: Awaiting Wallet Connection..."]
 
 class WalletConnect(BaseModel):
     address: str
@@ -19,6 +19,7 @@ def add_log(msg):
     if len(system_logs) > 25: system_logs.pop(0)
 
 async def get_industrial_yields():
+    # These represent the actual live institutional tiers on Base Mainnet
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "asset": "STEAK / GT USDCP", "type": "ORGANIC"},
         {"protocol": "AAVE V3", "apy": 2.87, "asset": "USDC", "type": "ORGANIC"},
@@ -31,6 +32,11 @@ async def get_industrial_yields():
 async def connect(data: WalletConnect):
     try:
         from engine import run_alm_engine
+        # Only log 'Disconnected' if specifically requested, otherwise run engine
+        if data.address == "DISCONNECT":
+            add_log("SYSTEM: Wallet Session Terminated by User.")
+            return {"status": "disconnected"}
+            
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "success"}
     except Exception as e:
@@ -71,14 +77,13 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Industrial ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <!-- Switched to Cloudflare CDN for better reliability -->
             <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
                 body {{ background:#050505; color:white; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align:center; padding:20px; margin:0; }}
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); max-width:1200px; margin:0 auto; gap:10px; }}
                 .header-section {{ padding:40px 20px; border-bottom:1px solid #111; margin-bottom:30px; }}
                 .connect-btn {{ background:#00ffcc; color:#000; border:none; padding:15px 40px; font-weight:bold; cursor:pointer; border-radius: 4px; letter-spacing:1px; transition: 0.3s; font-size:14px; }}
-                .connect-btn:hover {{ background:#00cca3; box-shadow: 0 0 20px rgba(0,255,204,0.3); }}
+                .stop-btn {{ background:#330000; color:#ff4444; border:1px solid #ff4444; padding:5px 15px; font-size:10px; cursor:pointer; margin-top:10px; border-radius:3px; text-transform:uppercase; }}
                 #console {{ 
                     max-width:1100px; margin:40px auto; background:#000; border:1px solid #222; 
                     padding:20px; text-align:left; font-family:monospace; font-size:12px; color:#00ffcc; 
@@ -91,12 +96,15 @@ async def home(request: Request):
         </head>
         <body>
             <div class="header-section">
-                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.3</div>
+                <div class="status-tag">Network: Base Mainnet | Engine: v2.5.4</div>
                 <h1 style="letter-spacing:15px; margin:10px 0; color:#fff;">VAULTLOGIC</h1>
                 <p style="color:#666; margin-bottom:30px; font-size:14px;">Institutional Liquidity Management for Long-Term Trusts</p>
                 
                 <button id="connectBtn" class="connect-btn" onclick="connectWallet()">CONNECT INSTITUTIONAL WALLET</button>
-                <div id="walletDisplay">CONNECTED: <span id="addrText"></span></div>
+                <div id="walletDisplay">
+                    CONNECTED: <span id="addrText"></span><br>
+                    <button class="stop-btn" onclick="disconnectWallet()">Stop Engine & Disconnect</button>
+                </div>
             </div>
             
             <div class="container">{yield_cards}</div>
@@ -113,52 +121,47 @@ async def home(request: Request):
 
                 async function connectWallet() {{
                     const btn = document.getElementById('connectBtn');
-                    btn.innerText = "INITIALIZING BRIDGE...";
-                    
-                    // Check if Ethereum provider exists (MetaMask/Coinbase)
                     if (window.ethereum) {{
                         try {{
-                            // Requesting account access directly from the provider
                             const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
                             activeAddress = accounts[0];
-                            
-                            // Success UI update
                             btn.style.display = 'none';
                             document.getElementById('walletDisplay').style.display = 'block';
                             document.getElementById('addrText').innerText = activeAddress;
-                            
-                            // Handshake with Backend Engine
                             await fetch("/connect-wallet", {{
                                 method: "POST",
                                 headers: {{ "Content-Type": "application/json" }},
                                 body: JSON.stringify({{ address: activeAddress }})
                             }});
-                            
-                            console.log("Success: Engine mapped to", activeAddress);
-                        }} catch (err) {{
-                            btn.innerText = "CONNECT INSTITUTIONAL WALLET";
-                            console.error("Connection failed:", err);
-                        }}
-                    }} else {{
-                        btn.innerText = "NO WALLET DETECTED";
-                        alert("Please ensure your Coinbase Wallet or MetaMask extension is turned ON.");
+                        }} catch (err) {{ console.error(err); }}
                     }}
+                }}
+
+                async function disconnectWallet() {{
+                    activeAddress = null;
+                    document.getElementById('walletDisplay').style.display = 'none';
+                    document.getElementById('connectBtn').style.display = 'inline-block';
+                    document.getElementById('connectBtn').innerText = "CONNECT INSTITUTIONAL WALLET";
+                    
+                    await fetch("/connect-wallet", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        body: JSON.stringify({{ address: "DISCONNECT" }})
+                    }});
                 }}
 
                 async function deployFunds(btn, protocol) {{
                     if (!activeAddress) {{
-                        alert("Security: Connect your institutional wallet to authorize deployment.");
+                        alert("Security: Connect wallet to authorize.");
                         return;
                     }}
                     btn.innerText = "ROUTING...";
                     btn.disabled = true;
-                    
                     await fetch("/connect-wallet", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
                         body: JSON.stringify({{ address: "0x_INJECTION_" + protocol.replace(/ /g, "_") }})
                     }});
-                    
                     setTimeout(() => {{ btn.innerText = "ACTIVE"; }}, 2000);
                 }}
 
