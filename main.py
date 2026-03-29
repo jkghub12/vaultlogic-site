@@ -34,6 +34,9 @@ async def connect(data: WalletConnect):
         if data.address == "DISCONNECT":
             add_log("SYSTEM: Wallet Session Terminated by User.")
             return {"status": "disconnected"}
+        # For System-Led Initiation (Best Path)
+        if "INITIATE_SYSTEM" in data.address:
+            add_log("SYSTEM: Global Engine Start. Scanning for optimal rebalance path...")
         asyncio.create_task(run_alm_engine(data.address, log_callback=add_log))
         return {"status": "success"}
     except Exception as e:
@@ -123,6 +126,8 @@ async def home(request: Request):
                 #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; text-align: left; }}
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
+                .initiate-btn {{ background:#2563eb; border:none; color:white; padding:15px 40px; border-radius:10px; font-weight:800; font-size:16px; cursor:pointer; margin-top: 20px; transition: transform 0.2s; }}
+                .initiate-btn:active {{ transform: scale(0.98); }}
             </style>
         </head>
         <body>
@@ -150,8 +155,11 @@ async def home(request: Request):
             <div class="hero-section">
                 <div style="font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800;">Kernel v2.5.7 • Industrial ALM</div>
                 <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
-                <p style="color:#64748b; max-width:650px; margin:25px auto 45px; font-size:19px;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability.</p>
-                <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
+                <p style="color:#64748b; max-width:650px; margin:25px auto 30px; font-size:19px;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability.</p>
+                <div style="display: flex; gap: 15px; justify-content: center; align-items: center;">
+                    <button onclick="initiateEngine(this)" class="initiate-btn">Initiate Engine</button>
+                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn" style="margin-top:20px; height: 50px;">Analyze Vaults</button>
+                </div>
             </div>
 
             <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0; text-align: left;">
@@ -222,6 +230,22 @@ async def home(request: Request):
                     }}
                 }}
 
+                async function initiateEngine(btn) {{
+                    if (!activeAddress) {{
+                        alert("Wallet must be connected to initiate global engine.");
+                        return;
+                    }}
+                    btn.innerText = "Engine Engaged...";
+                    btn.style.background = "#059669";
+                    
+                    // Trigger System-Led logic in the backend
+                    await fetch("/connect-wallet", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        body: JSON.stringify({{ address: activeAddress + "_INITIATE_SYSTEM" }})
+                    }});
+                }}
+
                 async function deployFunds(btn, protocol) {{
                     if (!activeAddress) {{ alert("Wallet connection required."); return; }}
                     btn.innerText = "Securing Path...";
@@ -231,7 +255,6 @@ async def home(request: Request):
                 function unlockPrompt() {{
                     const key = prompt("Institutional Access Key:");
                     if(key === "cb-institutional") {{
-                        // Inject the CB Pitch Overlay
                         const overlay = document.createElement('div');
                         overlay.id = "pitchOverlay";
                         overlay.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.98); color:white; z-index:9999; padding:80px 40px; overflow-y:auto; text-align:left;";
