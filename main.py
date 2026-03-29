@@ -44,12 +44,14 @@ async def verify_balance(data: EngineInit):
         actual_balance = raw_balance / 10**6
         
         if data.amount > actual_balance:
-            add_log(f"AUDIT: Wallet balance ({actual_balance:.2f}) below request. Entering Simulation.")
-            return {"status": "simulation", "message": "Low balance detected. Starting in Simulation Mode."}
+            add_log(f"REJECTED: ${data.amount:,.2f} request exceeds balance (${actual_balance:,.2f}).")
+            return {"status": "failed", "message": "Insufficient on-chain collateral."}
             
         return {"status": "success", "balance": actual_balance}
-    except Exception:
-        return {"status": "simulation", "message": "RPC Timeout. Starting in Simulation Mode."}
+    except Exception as e:
+        # Fallback to simulation if RPC is down, otherwise standard logic applies
+        add_log("NETWORK: RPC Latency detected. Allowing Demo validation.")
+        return {"status": "simulation", "message": "Demo Mode Active."}
 
 @app.post("/start-engine")
 async def start_engine(data: EngineInit):
@@ -60,7 +62,7 @@ async def start_engine(data: EngineInit):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # Using a standard string to avoid f-string curly brace conflicts with CSS/JS
+    # Standard string to avoid curly brace SyntaxErrors
     html_content = """
 <!DOCTYPE html>
 <html lang="en">
@@ -192,7 +194,7 @@ async def home(request: Request):
                     <button id="verify-btn" onclick="verifyAndStart()" class="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-sky-400 hover:text-white transition-all shadow-xl shadow-white/5 uppercase tracking-widest text-xs">
                         CONFIRM ALLOCATION
                     </button>
-                    <div id="sim-msg" class="text-sky-400 text-[10px] mt-4 hidden text-center italic">Simulation mode active (Low Balance).</div>
+                    <div id="sim-msg" class="text-[10px] mt-4 hidden text-center italic font-bold"></div>
                 </div>
             </div>
 
@@ -216,6 +218,8 @@ async def home(request: Request):
             
             btn.innerText = "AUDITING...";
             btn.disabled = true;
+            btn.className = "w-full py-4 bg-white text-black font-bold rounded-xl transition-all shadow-xl uppercase tracking-widest text-xs";
+            simMsg.classList.add('hidden');
             
             try {
                 const vRes = await fetch('/verify-balance', {
@@ -225,8 +229,20 @@ async def home(request: Request):
                 });
                 const vData = await vRes.json();
                 
-                if(vData.status === 'simulation') {
+                if(vData.status === 'failed') {
+                    simMsg.innerText = "INSUFFICIENT FUNDS. ACCESS DENIED.";
                     simMsg.classList.remove('hidden');
+                    simMsg.classList.add('text-red-500');
+                    btn.innerText = "ALLOCATION REJECTED";
+                    btn.classList.add('bg-red-600', 'text-white');
+                    // WE STOP HERE. NO ENGINE START.
+                    return;
+                }
+                
+                if(vData.status === 'simulation') {
+                    simMsg.innerText = "Simulation mode active (Demo Balance).";
+                    simMsg.classList.remove('hidden');
+                    simMsg.classList.add('text-sky-400');
                 }
                 
                 await fetch('/start-engine', {
