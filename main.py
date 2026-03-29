@@ -19,7 +19,6 @@ def add_log(msg):
     if len(system_logs) > 50: system_logs.pop(0)
 
 async def get_industrial_yields():
-    # Re-integrating the Global Digital Currency expansion (EURC/USD)
     return [
         {"protocol": "MORPHO BLUE", "apy": 3.62, "predicted": 3.85, "asset": "USDC", "type": "STABLE", "currency": "USD"},
         {"protocol": "AAVE V3", "apy": 4.12, "predicted": 4.25, "asset": "EURC", "type": "GLOBAL", "currency": "EUR"},
@@ -92,31 +91,25 @@ async def home(request: Request):
         <head>
             <title>VaultLogic | Global ALM</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap');
                 body {{ background:#f8fafc; color:#1e293b; font-family: 'Inter', sans-serif; text-align:center; padding:0; margin:0; line-height:1.6; scroll-behavior: smooth; }}
                 
                 .top-nav {{ background: white; border-bottom: 1px solid #e2e8f0; padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
                 .logo-container {{ display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }}
-                
                 .logo-img {{ height: 36px; width: auto; border-radius: 4px; }}
-                .logo-fallback {{ display: none; background: #0f172a; color: white; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 14px; }}
-                
                 .logo-text {{ font-weight: 800; letter-spacing: 1.5px; color: #0f172a; font-size: 20px; text-transform: uppercase; }}
+                
                 .nav-links a {{ margin-left: 20px; text-decoration: none; color: #64748b; font-size: 13px; font-weight: 600; cursor:pointer; }}
                 
-                .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; position: relative; overflow: hidden; }}
+                .hero-section {{ padding: 100px 20px; background: white; border-bottom: 1px solid #e2e8f0; }}
                 
                 .container {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); max-width:1200px; margin:20px auto 60px; gap:25px; padding: 0 20px; }}
                 .strategy-card {{ background:#fff; padding:30px; border-radius:16px; border:1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align:left; position: relative; transition: all 0.4s ease; overflow: hidden; }}
                 .strategy-card:hover {{ transform: translateY(-8px); border-color: #2563eb; }}
                 
                 .yield-display {{ position: relative; height: 75px; display: flex; align-items: center; }}
-                .current-apy {{ transition: all 0.3s ease; width: 100%; }}
                 .ai-shadow {{ position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: white; opacity: 0; transform: translateY(20px); transition: all 0.4s ease; display: flex; flex-direction: column; justify-content: center; pointer-events: none; }}
-                
-                .strategy-card:hover .current-apy {{ opacity: 0.1; filter: blur(8px); }}
                 .strategy-card:hover .ai-shadow {{ opacity: 1; transform: translateY(0); }}
                 
                 .deploy-btn {{ width:100%; background:#2563eb; color:#fff; border:none; padding:14px; font-weight:700; font-size:13px; cursor:pointer; border-radius:10px; transition: background 0.2s; }}
@@ -130,38 +123,39 @@ async def home(request: Request):
                 #log-stream {{ padding: 25px; height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8; background: #0f172a; text-align: left; }}
                 
                 .connect-btn {{ background:#0f172a; color:#fff; border:none; padding:12px 28px; font-weight:700; cursor:pointer; border-radius:10px; font-size:14px; }}
-                .status-badge {{ font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800; border: 1px solid #dbeafe; }}
+                
+                .compliance-card {{ background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; text-align: left; display: flex; gap: 40px; align-items: center; margin-bottom: 40px; }}
             </style>
         </head>
         <body>
             <nav class="top-nav">
                 <a href="/" class="logo-container">
-                    <img id="mainLogo" src="https://raw.githubusercontent.com/VaultLogic/VaultLogic/main/VLlogo.png" 
-                         onerror="document.getElementById('mainLogo').style.display='none'; document.getElementById('logoFallback').style.display='block';" 
-                         class="logo-img" alt="VaultLogic">
-                    <div id="logoFallback" class="logo-fallback">VL</div>
                     <div class="logo-text">VAULTLOGIC</div>
                 </a>
                 <div class="nav-links">
+                    <a href="#about">About</a>
                     <a href="#strategies">Strategies</a>
                     <a href="#tax-center">Compliance</a>
                     <a onclick="unlockPrompt()" style="color:#2563eb; font-weight:800;">Institutional Login</a>
                     <button id="connectBtn" class="connect-btn" style="margin-left:25px;" onclick="connectWallet()">Connect Wallet</button>
                     <div id="walletDisplay" style="display:none; margin-left:25px; align-items:center;">
                         <span id="addrText" style="font-family:'JetBrains Mono'; margin-right:15px; font-size:12px; color:#64748b;"></span>
-                        <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:8px 16px; font-size:11px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Disconnect</button>
+                        <button style="background:#fff; color:#ef4444; border:1px solid #fee2e2; padding:8px 16px; font-size:11px; cursor:pointer; border-radius:8px; font-weight:700;" onclick="location.reload()">Stop Engine</button>
                     </div>
                 </div>
             </nav>
 
             <div class="hero-section">
-                <div class="status-badge">Kernel v2.5.9 • Industrial ALM</div>
+                <div style="font-size:11px; color:#2563eb; background:#eff6ff; padding:5px 15px; border-radius:30px; margin-bottom:15px; display:inline-block; font-weight: 800;">Kernel v2.5.9 • Industrial ALM</div>
                 <h1 style="font-size:64px; font-weight:800; color:#0f172a; margin:10px 0; letter-spacing:-3px; line-height:1.1;">Global Treasury.<br>Automated Alpha.</h1>
                 <p style="color:#64748b; max-width:650px; margin:25px auto 45px; font-size:19px;">Sophisticated yield management for USDC, EURC, and PYUSD. Built for institutional stability.</p>
-                <div style="display:flex; justify-content:center; gap:15px;">
-                    <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
-                </div>
+                <button onclick="document.getElementById('strategies').scrollIntoView()" class="connect-btn">Analyze Vaults</button>
             </div>
+
+            <section id="about" style="padding: 80px 20px; max-width: 900px; margin: auto; border-bottom: 1px solid #e2e8f0;">
+                <h2 style="font-size: 32px; font-weight: 800;">Our Mission</h2>
+                <p style="font-size: 18px; color: #64748b;">VaultLogic provides a high-performance, automated <b>Asset-Liability Management (ALM)</b> kernel designed for institutional liquidity providers. While retail tools focus on simple swaps, VaultLogic focuses on Capital Efficiency and Risk-Adjusted Yield.</p>
+            </section>
 
             <div class="filter-bar">
                 <div class="filter-pill active" onclick="filterVaults('ALL', this)">All Opportunities</div>
@@ -180,13 +174,13 @@ async def home(request: Request):
             </div>
 
             <section id="tax-center" style="padding: 80px 20px; max-width: 1200px; margin: auto;">
-                <div style="background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 20px; text-align: left; display: flex; gap: 40px; align-items: center;">
+                <div class="compliance-card">
                     <div style="flex: 1;">
                         <h2 style="margin-top: 0;">Institutional Compliance</h2>
                         <h3 style="color:#2563eb;">1099-DA Automated Reporting</h3>
                         <p style="color: #64748b; font-size: 15px;">Every rebalance, interest claim, and swap is logged for immediate fiscal export. VaultLogic bridges the gap between DeFi complexity and corporate accounting standards.</p>
                     </div>
-                    <div id="taxDisplay" style="width: 300px; background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; text-align: center;">
+                    <div style="width: 300px; background: #f8fafc; padding: 30px; border-radius: 16px; border: 1px solid #e2e8f0; text-align: center;">
                         <p id="taxPrompt" style="color: #94a3b8; font-size: 13px; font-style: italic; margin: 0;">Awaiting Wallet Sync...</p>
                     </div>
                 </div>
@@ -234,7 +228,21 @@ async def home(request: Request):
 
                 function unlockPrompt() {{
                     const key = prompt("Institutional Access Key:");
-                    if(key === "cb-institutional") {{ alert("Access Granted."); }}
+                    if(key === "cb-institutional") {{
+                        alert("Access Granted. Loading Private Pitch...");
+                        document.body.innerHTML += `
+                            <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; z-index:9999; padding:100px; overflow-y:auto;">
+                                <button onclick="location.reload()" style="position:absolute; right:50px; top:50px; color:white; background:none; border:1px solid white; padding:10px;">Close</button>
+                                <h1>VaultLogic Industrial ALM Pitch</h1>
+                                <h2>Target: Coinbase Asset Management</h2>
+                                <p>VaultLogic acts as the "autopilot" for institutional treasuries, managing Dynamic Tick Placement and Volatility Hedging automatically.</p>
+                                <ul>
+                                    <li> Dynamic Tick Management for Uniswap V3</li>
+                                    <li> Volatility Hedging via Real-time IV</li>
+                                    <li> Multi-Protocol Aggregation</li>
+                                </ul>
+                            </div>`;
+                    }}
                 }}
 
                 setInterval(async () => {{
