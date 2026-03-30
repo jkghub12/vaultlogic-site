@@ -50,12 +50,10 @@ async def get_stats(address: str):
 
 @app.post("/activate")
 async def activate_deployment(data: EngineInit):
-    # 1. INSTITUTIONAL FLOOR CHECK
     if data.amount < 10000:
         add_log(f"REJECTED: ${data.amount:,.2f} is below $10k Floor.")
         return {"status": "error", "message": "Below Institutional Floor"}
     
-    # 2. ON-CHAIN COLLATERAL CHECK
     try:
         w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
         contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
@@ -68,14 +66,19 @@ async def activate_deployment(data: EngineInit):
     except Exception as e:
         return {"status": "error", "message": "RPC_VERIFICATION_FAILED"}
 
-    # 3. INITIALIZE ENGINE
     msg = kernel.deploy(data.address, data.amount)
     add_log(msg)
     return {"status": "success"}
 
+@app.post("/reset/{address}")
+async def reset_deployment(address: str):
+    if address in kernel.active_deployments:
+        del kernel.active_deployments[address]
+        add_log(f"SESSION_TERMINATED: {address[:8]}... logged out.")
+    return {"status": "reset"}
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    # Note: Frontend now dynamically fetches stats based on connected wallet
     return """
 <!DOCTYPE html>
 <html lang="en">
@@ -113,7 +116,7 @@ async def home():
                 <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
                 <span id="statusText" class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Kernel_Locked</span>
             </div>
-            <button onclick="connectWallet()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-10 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-[0.2em]">
+            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-10 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-[0.2em]">
                 AUTHENTICATE
             </button>
         </div>
@@ -193,20 +196,54 @@ async def home():
 
     <script>
         let userAddress = null;
+        let syncInterval = null;
+
+        function handleAuth() {
+            const btn = document.getElementById('authBtn');
+            if (btn.innerText === "AUTHENTICATE") {
+                connectWallet();
+            } else {
+                disconnectWallet();
+            }
+        }
 
         async function connectWallet() {
             if (window.ethereum) {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                userAddress = await provider.getSigner().getAddress();
-                
-                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                document.getElementById('authBtn').innerText = "DISCONNECT";
-                document.getElementById('connectionStatus').querySelector('span:first-child').classList.replace('bg-slate-500', 'bg-emerald-500');
-                document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,6)}...`;
-                
-                startSync();
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    userAddress = await provider.getSigner().getAddress();
+                    
+                    document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
+                    document.getElementById('authBtn').innerText = "DISCONNECT";
+                    document.getElementById('connectionStatus').querySelector('span:first-child').classList.replace('bg-slate-500', 'bg-emerald-500');
+                    document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,6)}...`;
+                    
+                    startSync();
+                } catch (e) { console.error(e); }
             }
+        }
+
+        async function disconnectWallet() {
+            if (userAddress) {
+                await fetch('/reset/' + userAddress, { method: 'POST' });
+            }
+            
+            // UI Reset
+            userAddress = null;
+            if (syncInterval) clearInterval(syncInterval);
+            
+            document.getElementById('dashboard').classList.add('opacity-20', 'pointer-events-none');
+            document.getElementById('authBtn').innerText = "AUTHENTICATE";
+            document.getElementById('statusText').innerText = "Kernel_Locked";
+            document.getElementById('connectionStatus').querySelector('span:first-child').classList.replace('bg-emerald-500', 'bg-slate-500');
+            
+            // Clear Display Values
+            document.getElementById('principalDisplay').innerText = "$0.00";
+            document.getElementById('liveProfit').innerText = "$0.0000";
+            document.getElementById('txStatus').classList.add('hidden');
+            document.getElementById('executeBtn').disabled = false;
+            document.getElementById('executeBtn').innerText = "EXECUTE DEPLOYMENT";
         }
 
         async function executeDeployment() {
@@ -237,27 +274,30 @@ async def home():
         }
 
         function startSync() {
-            setInterval(async () => {
+            if (syncInterval) clearInterval(syncInterval);
+            syncInterval = setInterval(async () => {
                 if (!userAddress) return;
-                const res = await fetch('/stats/' + userAddress);
-                const data = await res.json();
-                
-                if (data.stats) {
-                    document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
-                    document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
-                    document.getElementById('lendingPerc').innerText = data.stats.allocation.Lending + '%';
-                    document.getElementById('lendingBar').style.width = data.stats.allocation.Lending + '%';
-                    document.getElementById('lpPerc').innerText = data.stats.allocation.Liquidity + '%';
-                    document.getElementById('lpBar').style.width = data.stats.allocation.Liquidity + '%';
-                }
+                try {
+                    const res = await fetch('/stats/' + userAddress);
+                    const data = await res.json();
+                    
+                    if (data.stats) {
+                        document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
+                        document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
+                        document.getElementById('lendingPerc').innerText = data.stats.allocation.Lending + '%';
+                        document.getElementById('lendingBar').style.width = data.stats.allocation.Lending + '%';
+                        document.getElementById('lpPerc').innerText = data.stats.allocation.Liquidity + '%';
+                        document.getElementById('lpBar').style.width = data.stats.allocation.Liquidity + '%';
+                    }
 
-                const logOutput = document.getElementById('logOutput');
-                logOutput.innerHTML = data.logs.map(l => `
-                    <div class="p-4 border-l-2 ${l.includes('CRITICAL') ? 'border-red-500 bg-red-500/5' : 'border-slate-800 bg-white/[0.02]'}">
-                        <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
-                        <span class="${l.includes('CRITICAL') ? 'text-red-400' : 'text-slate-300'} uppercase">${l.split('KERNEL: ')[1] || l}</span>
-                    </div>
-                `).reverse().join('');
+                    const logOutput = document.getElementById('logOutput');
+                    logOutput.innerHTML = data.logs.map(l => `
+                        <div class="p-4 border-l-2 ${l.includes('CRITICAL') ? 'border-red-500 bg-red-500/5' : 'border-slate-800 bg-white/[0.02]'}">
+                            <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
+                            <span class="${l.includes('CRITICAL') ? 'text-red-400' : 'text-slate-300'} uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                        </div>
+                    `).reverse().join('');
+                } catch (e) { console.error("Sync Error", e); }
             }, 3000);
         }
     </script>
