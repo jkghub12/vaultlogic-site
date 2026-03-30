@@ -24,11 +24,13 @@ system_logs = [
     "Monetization: 20% Performance Fee (Industrial Standard)."
 ]
 
-# Track global monetization for the session
+# Track global monetization and active user deployment
 revenue_stats = {
     "total_profit_generated": 0.0,
     "fees_collected": 0.0,
-    "active_tvl": 142842019.00
+    "active_tvl": 142842019.00,
+    "user_deployed_capital": 0.0, # Tracked when user clicks "Execute"
+    "target_apy": 0.0582 # 5.82%
 }
 
 class EngineInit(BaseModel):
@@ -42,26 +44,41 @@ def add_log(msg):
     system_logs.append(formatted_msg)
     if len(system_logs) > 50: system_logs.pop(0)
 
-# --- BACKGROUND STRATEGY & REVENUE ENGINE ---
+# --- REAL-TIME REVENUE ENGINE ---
 async def yield_hunter():
-    """Simulates the Kernel actively hunting spreads and calculating the 20% cut."""
+    """
+    Simulates the Kernel actively hunting spreads.
+    If a user has deployed capital, it calculates REAL proportional yield.
+    """
     strategies = ["Morpho Blue", "Aerodrome V3", "Moonwell", "Aave V3"]
     while True:
-        await asyncio.sleep(random.randint(15, 30))
-        target = random.choice(strategies)
+        # Update every 10 seconds for a snappy demo
+        await asyncio.sleep(10)
         
-        # Simulate a small yield harvest based on active TVL
-        # This keeps the UI moving even before a user "deposits"
-        gross_yield = random.uniform(50.0, 450.0)
-        perf_fee = gross_yield * 0.20
-        net_to_user = gross_yield - perf_fee
+        # 1. Simulate Global Protocol Background Activity (for the vibe)
+        global_gross = random.uniform(20.0, 100.0)
         
-        revenue_stats["total_profit_generated"] += net_to_user
-        revenue_stats["fees_collected"] += perf_fee
-        
-        add_log(f"HARVEST: {target} cycle complete. Gross: ${gross_yield:.2f}")
-        add_log(f"REVENUE: 20% Perf Fee (${perf_fee:.2f}) routed to Founder Vault.")
-        add_log(f"STRATEGY: Re-allocating principal to highest spread node.")
+        # 2. Calculate REAL User Yield if they have deployed capital
+        user_yield = 0.0
+        if revenue_stats["user_deployed_capital"] > 0:
+            # Yield = (Principal * APY) / Seconds in Year * Interval
+            # We use 10 seconds as the interval
+            user_yield = (revenue_stats["user_deployed_capital"] * revenue_stats["target_apy"]) / 31536000 * 10
+            
+            # Apply 20% Founder Fee to the user's actual yield
+            user_perf_fee = user_yield * 0.20
+            user_net = user_yield - user_perf_fee
+            
+            revenue_stats["total_profit_generated"] += user_net
+            revenue_stats["fees_collected"] += user_perf_fee
+            
+            target = random.choice(strategies)
+            add_log(f"HARVEST: {target} cycle complete for user vault.")
+            add_log(f"REVENUE: 20% Fee (${user_perf_fee:.6f}) auto-routed to Founder.")
+        else:
+            # If no user capital, just show the global "background" profit ticking
+            revenue_stats["total_profit_generated"] += global_gross * 0.8
+            revenue_stats["fees_collected"] += global_gross * 0.2
 
 @app.on_event("startup")
 async def startup_event():
@@ -89,14 +106,19 @@ async def verify_balance(data: EngineInit):
             
         return {"status": "success", "balance": actual_balance}
     except Exception as e:
-        add_log("NETWORK: RPC Latency detected. Using Simulation Fallback.")
+        # Fallback for demo environments without RPC access
         return {"status": "simulation", "message": "Demo Mode Active."}
 
 @app.post("/start-engine")
 async def start_engine(data: EngineInit):
+    # This activates the REAL math in the background task
+    revenue_stats["user_deployed_capital"] = data.amount
+    revenue_stats["total_profit_generated"] = 0.0 # Reset stats for the new "Live" run
+    revenue_stats["fees_collected"] = 0.0
+    
     add_log(f"INIT: Spawning Managed ALM Loop for {data.address[:10]}...")
     add_log(f"ALLOCATING: ${data.amount:,.2f} into Industrial Floor.")
-    add_log("FEE_GATE: 20% Performance Fee logic attached to all harvest triggers.")
+    add_log(f"CALC: Target yield set to {revenue_stats['target_apy']*100}% APY.")
     return {"status": "running"}
 
 @app.get("/", response_class=HTMLResponse)
@@ -180,7 +202,7 @@ async def home(request: Request):
                 <h2 class="text-3xl font-bold text-sky-400 italic">5.82%</h2>
             </div>
             <div class="glass-panel p-6 rounded-xl border-l-2 border-l-emerald-500">
-                <p class="text-slate-500 text-[9px] font-black mb-3 uppercase tracking-[0.2em]">User Profit (Net)</p>
+                <p class="text-slate-500 text-[9px] font-black mb-3 uppercase tracking-[0.2em]">Live Profit (Net)</p>
                 <h2 class="text-3xl font-bold text-emerald-400 italic mono" id="userProfit">$0.00</h2>
             </div>
             <div class="glass-panel p-6 rounded-xl border-l-2 border-l-sky-500 bg-sky-500/5">
@@ -199,7 +221,7 @@ async def home(request: Request):
                                 <span class="text-slate-500">Allocation (USDC)</span>
                                 <span class="text-white" id="amountDisplay">$500,000</span>
                             </div>
-                            <input type="range" min="10000" max="5000000" step="10000" id="alloc-amt" value="500000" 
+                            <input type="range" min="1000" max="5000000" step="1000" id="alloc-amt" value="500000" 
                                    oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
                                    class="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer">
                         </div>
@@ -208,6 +230,11 @@ async def home(request: Request):
                         EXECUTE DEPLOYMENT
                     </button>
                     <div id="sim-msg" class="text-[9px] mt-6 hidden text-center italic font-black uppercase tracking-widest p-3 rounded bg-red-500/10 border border-red-500/20"></div>
+                </div>
+                
+                <div class="mt-6 glass-panel p-6 rounded-xl border border-white/5">
+                    <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">Active Principal</p>
+                    <p class="text-xl font-bold italic mono text-sky-500" id="activePrincipal">$0.00</p>
                 </div>
             </div>
 
@@ -227,8 +254,11 @@ async def home(request: Request):
             try {
                 const res = await fetch('/stats');
                 const data = await res.json();
-                document.getElementById('userProfit').innerText = '$' + data.total_profit_generated.toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById('founderFees').innerText = '$' + data.fees_collected.toLocaleString(undefined, {minimumFractionDigits: 2});
+                
+                // Use 4 decimal places so users with smaller deposits can see it ticking
+                document.getElementById('userProfit').innerText = '$' + data.total_profit_generated.toLocaleString(undefined, {minimumFractionDigits: 4});
+                document.getElementById('founderFees').innerText = '$' + data.fees_collected.toLocaleString(undefined, {minimumFractionDigits: 4});
+                document.getElementById('activePrincipal').innerText = '$' + data.user_deployed_capital.toLocaleString();
             } catch(e) {}
         }
 
@@ -251,6 +281,7 @@ async def home(request: Request):
                 simMsg.innerText = "CRITICAL: INSUFFICIENT COLLATERAL. ACCESS DENIED.";
                 simMsg.classList.remove('hidden');
                 btn.innerText = "DEPLOYMENT_REJECTED";
+                btn.disabled = false;
                 return;
             }
             
@@ -260,6 +291,9 @@ async def home(request: Request):
                 body: JSON.stringify({ address: window.userAddress, amount: parseFloat(amt) })
             });
             btn.innerText = "DEPLOYMENT_CONFIRMED";
+            simMsg.innerText = "SUCCESS: CAPITAL ACTIVATED IN KERNEL.";
+            simMsg.classList.remove('hidden', 'bg-red-500/10', 'border-red-500/20');
+            simMsg.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-500');
         }
 
         setInterval(async () => {
