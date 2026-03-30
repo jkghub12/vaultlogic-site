@@ -41,11 +41,8 @@ async def yield_hunter_loop():
     """Calculates real-time yield and 20% fees every 10 seconds."""
     while True:
         await asyncio.sleep(10)
-        # ENFORCEMENT: Yield only generates if Capital >= $10,000
         if system_state["user_deployed_capital"] >= 10000:
             gross_yield = (system_state["user_deployed_capital"] * system_state["target_apy"]) / 31536000 * 10
-            
-            # The 20% Founder Cut logic
             founder_fee = gross_yield * 0.20
             user_net = gross_yield - founder_fee
             
@@ -65,11 +62,28 @@ async def get_stats():
 
 @app.post("/activate")
 async def activate_deployment(data: EngineInit):
-    # BACKEND ENFORCEMENT
+    # 1. FLOOR CHECK
     if data.amount < 10000:
         add_log(f"REJECTED: ${data.amount:,.2f} is below the $10,000 Institutional Floor.")
         return {"status": "error", "message": "Below Institutional Floor"}
     
+    # 2. REAL ON-CHAIN BALANCE CHECK (The "Rejection" Logic)
+    try:
+        w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
+        usdc_contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
+        raw_balance = usdc_contract.functions.balanceOf(Web3.to_checksum_address(data.address)).call()
+        actual_balance = raw_balance / 10**6 
+        
+        if actual_balance < data.amount:
+            add_log(f"CRITICAL: Deployment of ${data.amount:,.2f} exceeds wallet balance (${actual_balance:,.2f}). ACCESS DENIED.")
+            return {"status": "error", "message": f"Insufficient Collateral (Wallet: ${actual_balance:,.2f})"}
+            
+    except Exception as e:
+        # Fallback if RPC fails, we still block by default for security
+        add_log("ERROR: Unable to verify on-chain collateral. Aborting.")
+        return {"status": "error", "message": "Verification Timeout"}
+
+    # 3. SUCCESS PATH
     system_state["user_deployed_capital"] = data.amount
     system_state["total_profit_generated"] = 0.0
     system_state["fees_collected"] = 0.0
@@ -101,7 +115,6 @@ async def home(request: Request):
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-10">
-
     <nav class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-16 gap-8">
         <div class="flex items-center gap-4">
             <div class="w-12 h-12 bg-sky-500 rounded-xl flex items-center justify-center kernel-glow">
@@ -112,7 +125,6 @@ async def home(request: Request):
                 <p class="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">Industrial Yield Protocol</p>
             </div>
         </div>
-
         <div class="flex items-center gap-6">
             <div id="connectionStatus" class="hidden md:flex items-center gap-3 glass-panel px-5 py-2.5 rounded-full border-sky-500/20">
                 <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
@@ -149,33 +161,27 @@ async def home(request: Request):
                 <div class="glass-panel p-10 rounded-[2.5rem] relative overflow-hidden border-t border-white/10">
                     <h3 class="text-sm font-black mb-2 uppercase tracking-[0.3em] text-sky-400">Capital Deployment</h3>
                     <p class="text-[10px] text-slate-500 uppercase font-black mb-10 tracking-widest">Institutional Only (Min $10,000)</p>
-                    
                     <div class="space-y-8 mb-12">
                         <div>
                             <div class="flex justify-between text-[11px] mb-4 font-black uppercase tracking-widest">
                                 <span class="text-slate-400">Target Allocation</span>
                                 <span class="text-white font-bold text-lg" id="amountDisplay">$10,000</span>
                             </div>
-                            <!-- SLIDER: Min 10k, Max 1M to show scalability -->
                             <input type="range" min="10000" max="1000000" step="10000" value="10000" id="depositInput"
                                    oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
                                    class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500">
                         </div>
                     </div>
-
                     <button id="executeBtn" onclick="executeDeployment()" class="w-full py-5 bg-sky-600 text-white font-black rounded-2xl hover:bg-white hover:text-black transition-all uppercase tracking-[0.4em] text-[11px]">
                         EXECUTE DEPLOYMENT
                     </button>
-                    
-                    <p id="txStatus" class="text-[10px] mt-8 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400"></p>
+                    <p id="txStatus" class="text-[10px] mt-8 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400"></p>
                 </div>
-
                 <div class="glass-panel p-8 rounded-3xl border border-white/5 bg-slate-900/20">
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mb-3">Active Principal</p>
                     <p class="text-3xl font-bold italic mono text-sky-500" id="principalDisplay">$0.00</p>
                 </div>
             </div>
-
             <div class="lg:col-span-8">
                 <div class="glass-panel rounded-[2.5rem] p-10 min-h-[550px] flex flex-col bg-slate-900/40">
                     <div class="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
@@ -194,14 +200,12 @@ async def home(request: Request):
 
     <script>
         let userAddress = null;
-
         async function connectWallet() {
             if (window.ethereum) {
                 const provider = new ethers.providers.Web3Provider(window.ethereum);
                 await provider.send("eth_requestAccounts", []);
                 const signer = provider.getSigner();
                 userAddress = await signer.getAddress();
-                
                 document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
                 document.getElementById('connectBtn').innerText = "DISCONNECT";
                 document.getElementById('connectionStatus').classList.remove('hidden');
@@ -219,13 +223,10 @@ async def home(request: Request):
             const status = document.getElementById('txStatus');
             
             btn.disabled = true;
-            btn.innerText = "SIGNING_TRANSACTION...";
-            status.classList.remove('hidden');
-            status.innerText = "AWAITING WALLET APPROVAL...";
-
-            await new Promise(r => setTimeout(r, 1500));
-            status.innerText = "USDC_APPROVAL_SUCCESS. DEPLOYING...";
-            await new Promise(r => setTimeout(r, 1500));
+            btn.innerText = "VERIFYING COLLATERAL...";
+            status.classList.remove('hidden', 'text-red-400', 'bg-red-500/10', 'border-red-500/20');
+            status.classList.add('text-sky-400', 'bg-sky-500/10', 'border-sky-500/20');
+            status.innerText = "SCANNING ON-CHAIN BALANCE...";
 
             const res = await fetch('/activate', {
                 method: 'POST',
@@ -240,27 +241,28 @@ async def home(request: Request):
             } else {
                 btn.disabled = false;
                 btn.innerText = "EXECUTE DEPLOYMENT";
-                status.innerText = "ERROR: " + result.message;
+                status.classList.replace('text-sky-400', 'text-red-400');
+                status.classList.replace('bg-sky-500/10', 'bg-red-500/10');
+                status.classList.replace('border-sky-500/20', 'border-red-500/20');
+                status.innerText = "CRITICAL: " + result.message;
             }
+            fetchLogs();
         }
 
         async function fetchLogs() {
             const res = await fetch('/stats');
             const data = await res.json();
-            
             document.getElementById('liveProfit').innerText = '$' + data.total_profit_generated.toLocaleString(undefined, {minimumFractionDigits: 4});
             document.getElementById('founderFee').innerText = '$' + data.fees_collected.toLocaleString(undefined, {minimumFractionDigits: 4});
             document.getElementById('principalDisplay').innerText = '$' + data.user_deployed_capital.toLocaleString();
-
             const logOutput = document.getElementById('logOutput');
             logOutput.innerHTML = data.logs.map(l => `
-                <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02] hover:border-sky-500 transition-colors">
+                <div class="p-4 border-l-2 ${l.includes('CRITICAL') ? 'border-red-500 bg-red-500/5' : 'border-slate-800 bg-white/[0.02]'} hover:border-sky-500 transition-colors">
                     <span class="text-sky-500 font-bold uppercase mr-3">KERNEL_v2.1:</span>
-                    <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                    <span class="${l.includes('CRITICAL') ? 'text-red-400' : 'text-slate-300'} uppercase">${l.split('KERNEL: ')[1] || l}</span>
                 </div>
             `).reverse().join('');
         }
-
         setInterval(fetchLogs, 3000);
     </script>
 </body>
