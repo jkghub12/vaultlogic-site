@@ -62,12 +62,10 @@ async def get_stats():
 
 @app.post("/activate")
 async def activate_deployment(data: EngineInit):
-    # 1. FLOOR CHECK
     if data.amount < 10000:
         add_log(f"REJECTED: ${data.amount:,.2f} is below the $10,000 Institutional Floor.")
         return {"status": "error", "message": "Below Institutional Floor"}
     
-    # 2. REAL ON-CHAIN BALANCE CHECK (The "Rejection" Logic)
     try:
         w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
         usdc_contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
@@ -79,16 +77,22 @@ async def activate_deployment(data: EngineInit):
             return {"status": "error", "message": f"Insufficient Collateral (Wallet: ${actual_balance:,.2f})"}
             
     except Exception as e:
-        # Fallback if RPC fails, we still block by default for security
         add_log("ERROR: Unable to verify on-chain collateral. Aborting.")
         return {"status": "error", "message": "Verification Timeout"}
 
-    # 3. SUCCESS PATH
     system_state["user_deployed_capital"] = data.amount
     system_state["total_profit_generated"] = 0.0
     system_state["fees_collected"] = 0.0
     add_log(f"DEPLOYMENT_CONFIRMED: ${data.amount:,.2f} activated in ALM Kernel.")
     return {"status": "success"}
+
+@app.post("/reset")
+async def reset_session():
+    system_state["user_deployed_capital"] = 0.0
+    system_state["total_profit_generated"] = 0.0
+    system_state["fees_collected"] = 0.0
+    add_log("SESSION_TERMINATED: Dashboard locked. Data purged.")
+    return {"status": "reset"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -126,11 +130,11 @@ async def home(request: Request):
             </div>
         </div>
         <div class="flex items-center gap-6">
-            <div id="connectionStatus" class="hidden md:flex items-center gap-3 glass-panel px-5 py-2.5 rounded-full border-sky-500/20">
+            <div id="connectionStatus" class="flex items-center gap-3 glass-panel px-5 py-2.5 rounded-full border-slate-500/20">
                 <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
-                <span class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Kernel_Locked</span>
+                <span id="statusText" class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Kernel_Locked</span>
             </div>
-            <button onclick="connectWallet()" id="connectBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-10 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-[0.2em]">
+            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-10 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-[0.2em]">
                 AUTHENTICATE
             </button>
         </div>
@@ -200,21 +204,69 @@ async def home(request: Request):
 
     <script>
         let userAddress = null;
+
+        function handleAuth() {
+            const btn = document.getElementById('authBtn');
+            if (btn.innerText === "AUTHENTICATE") {
+                connectWallet();
+            } else {
+                disconnectWallet();
+            }
+        }
+
         async function connectWallet() {
             if (window.ethereum) {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                const signer = provider.getSigner();
-                userAddress = await signer.getAddress();
-                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                document.getElementById('connectBtn').innerText = "DISCONNECT";
-                document.getElementById('connectionStatus').classList.remove('hidden');
-                document.getElementById('connectionStatus').innerHTML = `
-                    <span class="w-2 h-2 bg-emerald-500 rounded-full status-pulse"></span>
-                    <span class="text-[10px] font-black text-emerald-400 uppercase tracking-widest">AUTH: ${userAddress.substring(0,6)}...</span>
-                `;
-                fetchLogs();
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    const signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+                    
+                    document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
+                    document.getElementById('authBtn').innerText = "DISCONNECT";
+                    
+                    const connStatus = document.getElementById('connectionStatus');
+                    connStatus.classList.replace('border-slate-500/20', 'border-emerald-500/20');
+                    connStatus.querySelector('span:first-child').classList.replace('bg-slate-500', 'bg-emerald-500');
+                    connStatus.querySelector('span:first-child').classList.add('status-pulse');
+                    document.getElementById('statusText').classList.replace('text-slate-500', 'text-emerald-400');
+                    document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,6)}...${userAddress.substring(38)}`;
+                    
+                    fetchLogs();
+                } catch (e) {
+                    console.error("Connection failed", e);
+                }
             }
+        }
+
+        async function disconnectWallet() {
+            userAddress = null;
+            // Reset UI
+            document.getElementById('dashboard').classList.add('opacity-20', 'pointer-events-none');
+            document.getElementById('authBtn').innerText = "AUTHENTICATE";
+            
+            const connStatus = document.getElementById('connectionStatus');
+            connStatus.classList.replace('border-emerald-500/20', 'border-slate-500/20');
+            const dot = connStatus.querySelector('span:first-child');
+            dot.classList.replace('bg-emerald-500', 'bg-slate-500');
+            dot.classList.remove('status-pulse');
+            
+            const txt = document.getElementById('statusText');
+            txt.classList.replace('text-emerald-400', 'text-slate-500');
+            txt.innerText = "Kernel_Locked";
+
+            // Reset deployment UI state
+            document.getElementById('principalDisplay').innerText = "$0.00";
+            document.getElementById('liveProfit').innerText = "$0.0000";
+            document.getElementById('founderFee').innerText = "$0.0000";
+            document.getElementById('txStatus').classList.add('hidden');
+            const execBtn = document.getElementById('executeBtn');
+            execBtn.disabled = false;
+            execBtn.innerText = "EXECUTE DEPLOYMENT";
+
+            // Inform backend to reset session stats
+            await fetch('/reset', { method: 'POST' });
+            fetchLogs();
         }
 
         async function executeDeployment() {
@@ -224,8 +276,7 @@ async def home(request: Request):
             
             btn.disabled = true;
             btn.innerText = "VERIFYING COLLATERAL...";
-            status.classList.remove('hidden', 'text-red-400', 'bg-red-500/10', 'border-red-500/20');
-            status.classList.add('text-sky-400', 'bg-sky-500/10', 'border-sky-500/20');
+            status.className = "text-[10px] mt-8 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400";
             status.innerText = "SCANNING ON-CHAIN BALANCE...";
 
             const res = await fetch('/activate', {
@@ -241,9 +292,7 @@ async def home(request: Request):
             } else {
                 btn.disabled = false;
                 btn.innerText = "EXECUTE DEPLOYMENT";
-                status.classList.replace('text-sky-400', 'text-red-400');
-                status.classList.replace('bg-sky-500/10', 'bg-red-500/10');
-                status.classList.replace('border-sky-500/20', 'border-red-500/20');
+                status.className = "text-[10px] mt-8 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400";
                 status.innerText = "CRITICAL: " + result.message;
             }
             fetchLogs();
@@ -252,9 +301,14 @@ async def home(request: Request):
         async function fetchLogs() {
             const res = await fetch('/stats');
             const data = await res.json();
-            document.getElementById('liveProfit').innerText = '$' + data.total_profit_generated.toLocaleString(undefined, {minimumFractionDigits: 4});
-            document.getElementById('founderFee').innerText = '$' + data.fees_collected.toLocaleString(undefined, {minimumFractionDigits: 4});
-            document.getElementById('principalDisplay').innerText = '$' + data.user_deployed_capital.toLocaleString();
+            
+            // Only update profit if wallet is connected to avoid flickering stale data
+            if (userAddress) {
+                document.getElementById('liveProfit').innerText = '$' + data.total_profit_generated.toLocaleString(undefined, {minimumFractionDigits: 4});
+                document.getElementById('founderFee').innerText = '$' + data.fees_collected.toLocaleString(undefined, {minimumFractionDigits: 4});
+                document.getElementById('principalDisplay').innerText = '$' + data.user_deployed_capital.toLocaleString();
+            }
+
             const logOutput = document.getElementById('logOutput');
             logOutput.innerHTML = data.logs.map(l => `
                 <div class="p-4 border-l-2 ${l.includes('CRITICAL') ? 'border-red-500 bg-red-500/5' : 'border-slate-800 bg-white/[0.02]'} hover:border-sky-500 transition-colors">
