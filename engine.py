@@ -1,56 +1,58 @@
-import asyncio
 import random
 from datetime import datetime
-from web3 import Web3
 
-# Public RPC for Base Mainnet
-BASE_RPC_URL = "https://mainnet.base.org"
-USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-
-ERC20_ABI = [
-    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
-]
-
-active_sessions = {}
-
-async def run_alm_engine(wallet_address, log_callback):
+class StrategyManager:
     """
-    Industrial ALM Kernel v2.5.1 - Precision Update
-    Increased decimal precision for micro-balance verification.
+    Manages capital allocation logic for a specific deployment.
+    Calculates 80/20 profit splits and simulates protocol rebalancing.
     """
-    def ts(): return datetime.now().strftime("%H:%M:%S")
-    
-    # Session setup
-    active_sessions[wallet_address] = True
-    w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
-    
-    log_callback(f"KERNEL: Connecting to Base Mainnet...")
-    
-    # On-chain check
-    try:
-        usdc_contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
-        raw_balance = usdc_contract.functions.balanceOf(Web3.to_checksum_address(wallet_address)).call()
-        actual_balance_usdc = raw_balance / 10**6 
-        log_callback(f"AUDIT: Confirmed {actual_balance_usdc:,.2f} USDC on-chain.")
-    except Exception as e:
-        log_callback(f"WARN: RPC Timeout. Using session-provided balance.")
-        actual_balance_usdc = 1.50 # Fallback for the demo
+    def __init__(self, principal, target_apy=0.0582):
+        self.principal = principal
+        self.target_apy = target_apy
+        self.user_net_profit = 0.0
+        self.founder_fees_collected = 0.0
+        self.start_time = datetime.now()
+        self.allocation = {"Lending": 70, "Liquidity": 30}
 
-    target_apy = 3.62
-    log_callback(f"STRATEGY: Multi-Pool Preservation ({target_apy}% APY) Engaged.")
-    
-    accumulated_profit = 0.0
-    
-    while active_sessions.get(wallet_address):
-        await asyncio.sleep(5) # Faster updates for testing
+    def calculate_tick(self, seconds=10):
+        """Calculates yield and splits for a 10-second window."""
+        # Annual yield / seconds in year * window
+        gross_yield = (self.principal * self.target_apy) / 31536000 * seconds
         
-        # Calculate tiny earnings for tiny balances
-        # (Balance * Rate) / Seconds in year * Interval
-        profit_increment = (actual_balance_usdc * (target_apy / 100) / 31536000) * 5
-        accumulated_profit += profit_increment
+        # The 20% Founder Cut (Vaultlogic's Revenue)
+        fee = gross_yield * 0.20
+        net = gross_yield - fee
         
-        # Show 8 decimal places so we can see the 1.50 USDC earning
-        log_callback(f"YIELD: +${accumulated_profit:.8f} generated.")
+        self.user_net_profit += net
+        self.founder_fees_collected += fee
         
-        if random.randint(0, 10) > 8:
-            log_callback(f"HEALTH: Monitoring collateral ratios on Morpho...")
+        # Simulate strategy shifts based on "market" conditions
+        if random.random() > 0.8:
+            new_lending = random.randint(60, 85)
+            self.allocation = {"Lending": new_lending, "Liquidity": 100 - new_lending}
+            return f"Strategy Optimized: Moved to {new_lending}% Lending / {100-new_lending}% LP"
+        
+        return None
+
+class VaultLogicKernel:
+    def __init__(self):
+        self.active_deployments = {} # Map: WalletAddress -> StrategyManager
+
+    def deploy(self, address, amount):
+        self.active_deployments[address] = StrategyManager(amount)
+        return f"KERNEL_ACTIVE: Deployment of ${amount:,.2f} confirmed for {address[:8]}..."
+
+    def get_stats(self, address):
+        if address not in self.active_deployments:
+            return None
+        strat = self.active_deployments[address]
+        return {
+            "principal": strat.principal,
+            "net_profit": strat.user_net_profit,
+            "founder_fees": strat.founder_fees_collected,
+            "allocation": strat.allocation,
+            "apy": strat.target_apy
+        }
+
+# Global Instance to be imported by main.py
+kernel = VaultLogicKernel()
