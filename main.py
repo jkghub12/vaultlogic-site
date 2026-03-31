@@ -13,18 +13,16 @@ app = FastAPI()
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-# Checksummed Demo Address to prevent EIP-55 Sync Errors
+# Professional Checksumming for Demo Identity
 DEMO_ADDRESS = Web3.to_checksum_address("0x2d8E2788a42FA2089279743c746C9742721f5C14")
 
 w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
-
-# Standard ERC20 ABI for balance checks
 ERC20_ABI = [
     {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
 ]
 usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=ERC20_ABI)
 
-audit_logs = ["VAULTLOGIC V3.5-CORE: Ready for secure deployment."]
+audit_logs = ["VAULTLOGIC V3.6-STABLE: Industrial Gateway Ready."]
 
 class EngineInit(BaseModel):
     address: str
@@ -37,7 +35,6 @@ def add_log(msg):
     if len(audit_logs) > 30: audit_logs.pop(0)
 
 async def background_kernel_loop():
-    """Ticking the engine for active deployments."""
     while True:
         await asyncio.sleep(10)
         for addr in list(kernel.active_deployments.keys()):
@@ -51,7 +48,6 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     try:
-        # Prevent sync errors by force-checksumming incoming requests
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
@@ -64,27 +60,23 @@ async def get_stats(address: str):
 async def activate(data: EngineInit):
     try:
         target_address = Web3.to_checksum_address(data.address)
-        
-        # 1. Check for Minimum Floor ($10,000)
         if data.amount < 10000:
             add_log(f"REJECTED: ${data.amount:,.2f} is below the Institutional Floor.")
             return {"status": "error", "message": "Below $10k Floor"}
 
-        # 2. Real-World Balance Check (Skip only for Demo)
         if not data.is_demo:
             raw_balance = usdc_contract.functions.balanceOf(target_address).call()
-            # USDC has 6 decimals
             actual_usdc = raw_balance / 10**6
             if actual_usdc < data.amount:
-                add_log(f"CRITICAL: On-chain balance (${actual_usdc:,.2f}) insufficient for requested allocation.")
-                return {"status": "error", "message": "Insufficient On-Chain USDC"}
+                add_log(f"CRITICAL: Insufficient Funds (${actual_usdc:,.2f} available).")
+                return {"status": "error", "message": "Check USDC Balance"}
 
         msg = kernel.deploy(target_address, data.amount, BASE_RPC_URL)
         add_log(msg)
         return {"status": "success", "validated_address": target_address}
     except Exception as e:
-        add_log(f"VALIDATION ERROR: {str(e)}")
-        return {"status": "error", "message": "Invalid Checksum or Network Error"}
+        add_log(f"NETWORK ERROR: {str(e)}")
+        return {"status": "error", "message": "Network/Validation Error"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
@@ -98,10 +90,13 @@ async def home():
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        body {{ background: #020408; color: #f8fafc; font-family: 'Inter', sans-serif; }}
+        body {{ background: #020408; color: #f8fafc; font-family: 'Inter', sans-serif; overflow-x: hidden; }}
         .glass {{ background: rgba(10, 15, 25, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }}
         .accent-gradient {{ background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); }}
+        .btn-shadow {{ box-shadow: 0 4px 14px 0 rgba(14, 165, 233, 0.39); }}
         input[type=range] {{ accent-color: #0ea5e9; }}
+        ::-webkit-scrollbar {{ width: 4px; }}
+        ::-webkit-scrollbar-thumb {{ background: #1e293b; border-radius: 10px; }}
     </style>
 </head>
 <body class="p-6 md:p-10 min-h-screen flex flex-col">
@@ -113,7 +108,10 @@ async def home():
                 <p class="text-[8px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-1">Institutional Autopilot</p>
             </div>
         </div>
-        <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-6 py-2.5 rounded-lg font-black text-[10px] tracking-widest uppercase hover:bg-slate-200 transition-all shadow-xl">Connect Wallet</button>
+        <div class="flex items-center gap-4">
+            <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-6 py-2.5 rounded-lg font-black text-[10px] tracking-widest uppercase hover:bg-slate-200 transition-all shadow-xl">Connect Wallet</button>
+            <button id="disconnectBtn" onclick="disconnect()" class="hidden text-slate-500 hover:text-red-500 text-[10px] font-bold uppercase tracking-widest transition-all">Disconnect</button>
+        </div>
     </nav>
 
     <main id="mainDash" class="max-w-7xl w-full mx-auto opacity-20 pointer-events-none transition-all duration-700 flex-grow">
@@ -138,14 +136,14 @@ async def home():
                 <div class="space-y-10">
                     <div>
                         <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-4">
-                            <span>Allocation</span>
+                            <span>Allocation Range</span>
                             <span id="amtVal" class="text-white">$10,000</span>
                         </div>
                         <input type="range" id="amtRange" min="10000" max="1000000" step="5000" value="10000" 
                                class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer"
                                oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
                     </div>
-                    <button id="deployBtn" onclick="initKernel()" class="w-full py-5 accent-gradient text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all">
+                    <button id="deployBtn" onclick="initKernel()" class="w-full py-5 accent-gradient text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.2em] btn-shadow hover:scale-[1.02] active:scale-95 transition-all">
                         Initialize ALM Kernel
                     </button>
                 </div>
@@ -155,8 +153,8 @@ async def home():
                 <div class="flex justify-between items-center mb-6 border-b border-white/5 pb-6 font-mono">
                     <p id="activeWallet" class="text-[10px] text-slate-500 uppercase tracking-widest">Awaiting Identity...</p>
                     <div class="flex items-center gap-2">
-                        <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span class="text-[9px] font-bold text-emerald-500 uppercase">Live Audit</span>
+                        <div id="statusDot" class="w-2 h-2 rounded-full bg-slate-700"></div>
+                        <span id="auditText" class="text-[9px] font-bold text-slate-500 uppercase">Audit Standby</span>
                     </div>
                 </div>
                 <div id="logOutput" class="font-mono text-[11px] space-y-4 max-h-[350px] overflow-y-auto pr-4"></div>
@@ -166,18 +164,19 @@ async def home():
 
     <footer class="max-w-7xl w-full mx-auto mt-20 pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between gap-12 opacity-60 hover:opacity-100 transition-opacity">
         <div class="flex-1">
-            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Non-Crypto Custody</h4>
-            <div class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5">
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Traditional Banking Gateways</h4>
+            <div class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5 max-w-sm">
                 <div>
-                    <p class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank Account</p>
-                    <p class="text-[9px] text-slate-500 mt-1">Powered by Plaid Industrial Bridge</p>
+                    <p class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank (Plaid)</p>
+                    <p class="text-[9px] text-slate-500 mt-1">Non-custodial bank settlements</p>
                 </div>
                 <div class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-xs group-hover:bg-white group-hover:text-black transition-all">→</div>
             </div>
         </div>
-        <div class="text-right">
-             <button id="demoBtn" onclick="toggleDemo()" class="text-slate-600 hover:text-sky-500 text-[10px] font-bold uppercase tracking-widest transition-colors">Launch Internal Demo System</button>
-             <p class="text-[9px] text-slate-700 mt-2">v3.5-CORE-PRODUCTION-STABLE</p>
+        <div id="demoContainer" class="text-right">
+             <button id="demoBtn" onclick="toggleDemo()" class="text-slate-600 hover:text-sky-500 text-[10px] font-bold uppercase tracking-widest transition-colors">Access Demo Sandbox</button>
+             <button id="stopDemoBtn" onclick="disconnect()" class="hidden bg-red-500/10 text-red-500 border border-red-500/20 px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Stop Demo & Exit Sandbox</button>
+             <p class="text-[9px] text-slate-700 mt-2 tracking-widest">VAULTLOGIC V3.6 CORE</p>
         </div>
     </footer>
 
@@ -187,18 +186,62 @@ async def home():
         let isDemoMode = false;
         const DEMO_ADDR = "{DEMO_ADDRESS}";
 
+        function disconnect() {{
+            walletAddress = null;
+            isDemoMode = false;
+            if (syncTimer) clearInterval(syncTimer);
+            
+            // UI Reset
+            document.getElementById('mainDash').classList.add('opacity-20', 'pointer-events-none');
+            
+            // Auth Button Reset
+            const authBtn = document.getElementById('authBtn');
+            authBtn.innerText = "Connect Wallet";
+            authBtn.classList.remove('bg-sky-600', 'text-white');
+            authBtn.classList.add('bg-white', 'text-black');
+            authBtn.disabled = false;
+            
+            // Footer Reset
+            document.getElementById('demoBtn').classList.remove('hidden');
+            document.getElementById('stopDemoBtn').classList.add('hidden');
+            document.getElementById('disconnectBtn').classList.add('hidden');
+            
+            // Data Clean
+            document.getElementById('activeWallet').innerText = "Awaiting Identity...";
+            document.getElementById('statusDot').classList.replace('bg-emerald-500', 'bg-slate-700');
+            document.getElementById('auditText').classList.replace('text-emerald-500', 'text-slate-500');
+            document.getElementById('auditText').innerText = "Audit Standby";
+            document.getElementById('principalDisplay').innerText = "$0";
+            document.getElementById('liveProfit').innerText = "$0.0000";
+            document.getElementById('logOutput').innerHTML = "";
+            
+            // Deployment Button Reset
+            const dBtn = document.getElementById('deployBtn');
+            dBtn.innerText = "Initialize ALM Kernel";
+            dBtn.classList.add('accent-gradient');
+            dBtn.classList.remove('bg-emerald-600', 'bg-red-900');
+            dBtn.disabled = false;
+        }}
+
         function toggleDemo() {{
             if(walletAddress && !isDemoMode) {{
-                if(!confirm("Switching to Demo will disconnect your current wallet. Proceed?")) return;
+                // Simple logical guard, though in this UI we'd likely disconnect first
             }}
             isDemoMode = true;
             walletAddress = DEMO_ADDR;
-            updateUIForIdentity("DEMO SYSTEM ACTIVE");
+            
+            // UI Switch for Footer
+            document.getElementById('demoBtn').classList.add('hidden');
+            document.getElementById('stopDemoBtn').classList.remove('hidden');
+            
+            updateUIForIdentity("DEMO SESSION");
         }}
 
         async function toggleAuth() {{
+            if (isDemoMode) return; // Prevent connecting while in demo unless they stop demo first
+
             if (typeof window.ethereum === 'undefined') {{
-                alert("Metamask or Coinbase Wallet required for institutional access.");
+                alert("Metamask/Wallet required for production access.");
                 return;
             }}
             try {{
@@ -206,22 +249,37 @@ async def home():
                 if (accounts.length > 0) {{
                     isDemoMode = false;
                     walletAddress = accounts[0];
-                    updateUIForIdentity("AUTHENTICATED");
+                    updateUIForIdentity("PRODUCTION");
                 }}
             }} catch (e) {{ console.error(e); }}
         }}
 
         function updateUIForIdentity(statusText) {{
             const btn = document.getElementById('authBtn');
+            const disBtn = document.getElementById('disconnectBtn');
             const displayAddr = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
             
-            btn.innerText = isDemoMode ? "DEMO ACTIVE" : displayAddr;
-            btn.classList.toggle('bg-sky-600', isDemoMode);
-            btn.classList.toggle('bg-white', !isDemoMode);
+            if(isDemoMode) {{
+                btn.innerText = "DEMO ACTIVE";
+                btn.classList.remove('bg-white', 'text-black');
+                btn.classList.add('bg-sky-600', 'text-white');
+                btn.disabled = true; // Button disabled during demo to force "Stop Demo" usage
+            }} else {{
+                btn.innerText = displayAddr;
+                btn.classList.remove('bg-sky-600');
+                btn.classList.add('bg-white');
+                btn.disabled = false;
+                disBtn.classList.remove('hidden');
+            }}
             
             document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress.toUpperCase();
             document.getElementById('statusLabel').innerText = statusText;
             document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
+            
+            document.getElementById('statusDot').classList.replace('bg-slate-700', 'bg-emerald-500');
+            document.getElementById('auditText').classList.replace('text-slate-500', 'text-emerald-500');
+            document.getElementById('auditText').innerText = "Live Audit";
+
             startSync();
         }}
 
