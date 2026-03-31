@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from web3 import Web3
-from engine import kernel # Importing our Kernel logic
+from engine import kernel 
 import uvicorn
 from datetime import datetime
 
@@ -12,14 +12,24 @@ app = FastAPI()
 
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
+USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+# Checksummed Demo Address to prevent EIP-55 Sync Errors
+DEMO_ADDRESS = Web3.to_checksum_address("0x2d8E2788a42FA2089279743c746C9742721f5C14")
+
 w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
 
-# Global Logs for the UI
-audit_logs = ["VaultLogic v2.1-LIVE: System Ready. Waiting for Authentication..."]
+# Standard ERC20 ABI for balance checks
+ERC20_ABI = [
+    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
+]
+usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=ERC20_ABI)
+
+audit_logs = ["VAULTLOGIC V3.5-CORE: Ready for secure deployment."]
 
 class EngineInit(BaseModel):
     address: str
     amount: float
+    is_demo: bool = False
 
 def add_log(msg):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -27,13 +37,10 @@ def add_log(msg):
     if len(audit_logs) > 30: audit_logs.pop(0)
 
 async def background_kernel_loop():
-    """Ticking the engine every 10 seconds for all active users."""
+    """Ticking the engine for active deployments."""
     while True:
         await asyncio.sleep(10)
         for addr in list(kernel.active_deployments.keys()):
-            if random.random() > 0.8:
-                kernel.active_deployments[addr].refresh_market_rates()
-            
             msg = kernel.active_deployments[addr].calculate_tick(10)
             if msg: add_log(msg)
 
@@ -44,32 +51,44 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     try:
+        # Prevent sync errors by force-checksumming incoming requests
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
             "logs": audit_logs
         }
-    except:
-        return {"stats": None, "logs": audit_logs}
+    except Exception as e:
+        return {"stats": None, "logs": audit_logs, "error": str(e)}
 
 @app.post("/activate")
 async def activate(data: EngineInit):
     try:
         target_address = Web3.to_checksum_address(data.address)
+        
+        # 1. Check for Minimum Floor ($10,000)
         if data.amount < 10000:
-            add_log(f"CRITICAL REJECTION: ${data.amount:,.2f} is below the Institutional Floor.")
+            add_log(f"REJECTED: ${data.amount:,.2f} is below the Institutional Floor.")
             return {"status": "error", "message": "Below $10k Floor"}
+
+        # 2. Real-World Balance Check (Skip only for Demo)
+        if not data.is_demo:
+            raw_balance = usdc_contract.functions.balanceOf(target_address).call()
+            # USDC has 6 decimals
+            actual_usdc = raw_balance / 10**6
+            if actual_usdc < data.amount:
+                add_log(f"CRITICAL: On-chain balance (${actual_usdc:,.2f}) insufficient for requested allocation.")
+                return {"status": "error", "message": "Insufficient On-Chain USDC"}
 
         msg = kernel.deploy(target_address, data.amount, BASE_RPC_URL)
         add_log(msg)
         return {"status": "success", "validated_address": target_address}
     except Exception as e:
         add_log(f"VALIDATION ERROR: {str(e)}")
-        return {"status": "error", "message": "Invalid Checksum"}
+        return {"status": "error", "message": "Invalid Checksum or Network Error"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    return """
+    return f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -79,179 +98,188 @@ async def home():
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        body { background: #020408; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(10, 15, 25, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
-        .accent-gradient { background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        body {{ background: #020408; color: #f8fafc; font-family: 'Inter', sans-serif; }}
+        .glass {{ background: rgba(10, 15, 25, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }}
+        .accent-gradient {{ background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); }}
+        input[type=range] {{ accent-color: #0ea5e9; }}
     </style>
 </head>
-<body class="p-4 md:p-10 min-h-screen">
-    <nav class="max-w-7xl mx-auto flex justify-between items-center mb-12">
+<body class="p-6 md:p-10 min-h-screen flex flex-col">
+    <nav class="max-w-7xl w-full mx-auto flex justify-between items-center mb-12">
         <div class="flex items-center gap-4">
-            <div class="w-10 h-10 accent-gradient rounded-xl flex items-center justify-center text-white font-black text-xl italic shadow-lg shadow-blue-500/20">V</div>
+            <div class="w-10 h-10 accent-gradient rounded-xl flex items-center justify-center text-white font-black text-xl italic">V</div>
             <div>
                 <h1 class="text-xl font-black italic tracking-tighter uppercase leading-none">VaultLogic</h1>
                 <p class="text-[8px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-1">Institutional Autopilot</p>
             </div>
         </div>
-        <div class="flex gap-3">
-            <button id="demoBtn" onclick="toggleDemo()" class="border border-white/10 text-slate-400 px-4 py-2.5 rounded-lg font-bold text-[9px] uppercase tracking-widest hover:bg-white/5 transition-all">Demo Access</button>
-            <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-6 py-2.5 rounded-lg font-black text-[10px] tracking-widest uppercase hover:bg-slate-200 transition-all shadow-xl shadow-white/5">Authenticate</button>
-        </div>
+        <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-6 py-2.5 rounded-lg font-black text-[10px] tracking-widest uppercase hover:bg-slate-200 transition-all shadow-xl">Connect Wallet</button>
     </nav>
 
-    <main id="mainDash" class="max-w-7xl mx-auto opacity-20 pointer-events-none transition-all duration-700">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="glass p-8 rounded-3xl relative overflow-hidden group">
-                <div class="absolute top-0 left-0 w-1 h-full bg-sky-500"></div>
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Capital Under Management</p>
+    <main id="mainDash" class="max-w-7xl w-full mx-auto opacity-20 pointer-events-none transition-all duration-700 flex-grow">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-center">
+            <div class="glass p-8 rounded-3xl border-l-4 border-sky-500">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Capital Managed</p>
                 <h2 id="principalDisplay" class="text-5xl font-black italic tracking-tighter">$0</h2>
             </div>
-            <div class="glass p-8 rounded-3xl relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Net Yield (80/20 Split)</p>
+            <div class="glass p-8 rounded-3xl border-l-4 border-emerald-500">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Net Yield</p>
                 <h2 id="liveProfit" class="text-5xl font-black text-emerald-400 italic tracking-tighter">$0.0000</h2>
             </div>
-            <div class="glass p-8 rounded-3xl relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Kernel Status</p>
+            <div class="glass p-8 rounded-3xl border-l-4 border-indigo-500">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Kernel Status</p>
                 <h2 id="statusLabel" class="text-4xl font-black text-white italic uppercase tracking-tighter">STANDBY</h2>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-4 glass p-10 rounded-3xl">
-                <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-sky-500 mb-8">Deployment Parameters</h3>
+                <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-sky-500 mb-8 text-center">Deployment Controls</h3>
                 <div class="space-y-10">
                     <div>
                         <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-4">
-                            <span>Institutional Allocation</span>
+                            <span>Allocation</span>
                             <span id="amtVal" class="text-white">$10,000</span>
                         </div>
-                        <input type="range" id="amtRange" min="10000" max="500000" step="5000" value="10000" 
-                               class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                        <input type="range" id="amtRange" min="10000" max="1000000" step="5000" value="10000" 
+                               class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer"
                                oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
                     </div>
-                    <button id="deployBtn" onclick="initKernel()" class="w-full py-5 accent-gradient text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-blue-500/10 hover:scale-[1.02] active:scale-95 transition-all">
+                    <button id="deployBtn" onclick="initKernel()" class="w-full py-5 accent-gradient text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all">
                         Initialize ALM Kernel
                     </button>
                 </div>
             </div>
 
             <div class="lg:col-span-8 glass p-10 rounded-3xl">
-                <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
-                    <div>
-                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Real-Time Audit Terminal</p>
-                        <p id="activeWallet" class="text-[9px] text-slate-600 mt-1 font-mono uppercase">Not Connected</p>
-                    </div>
-                    <div class="flex gap-2">
+                <div class="flex justify-between items-center mb-6 border-b border-white/5 pb-6 font-mono">
+                    <p id="activeWallet" class="text-[10px] text-slate-500 uppercase tracking-widest">Awaiting Identity...</p>
+                    <div class="flex items-center gap-2">
                         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Live Sync</span>
+                        <span class="text-[9px] font-bold text-emerald-500 uppercase">Live Audit</span>
                     </div>
                 </div>
-                <div id="logOutput" class="font-mono text-[11px] space-y-3 max-h-[400px] overflow-y-auto pr-4"></div>
+                <div id="logOutput" class="font-mono text-[11px] space-y-4 max-h-[350px] overflow-y-auto pr-4"></div>
             </div>
         </div>
     </main>
 
+    <footer class="max-w-7xl w-full mx-auto mt-20 pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between gap-12 opacity-60 hover:opacity-100 transition-opacity">
+        <div class="flex-1">
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Non-Crypto Custody</h4>
+            <div class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5">
+                <div>
+                    <p class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank Account</p>
+                    <p class="text-[9px] text-slate-500 mt-1">Powered by Plaid Industrial Bridge</p>
+                </div>
+                <div class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-xs group-hover:bg-white group-hover:text-black transition-all">→</div>
+            </div>
+        </div>
+        <div class="text-right">
+             <button id="demoBtn" onclick="toggleDemo()" class="text-slate-600 hover:text-sky-500 text-[10px] font-bold uppercase tracking-widest transition-colors">Launch Internal Demo System</button>
+             <p class="text-[9px] text-slate-700 mt-2">v3.5-CORE-PRODUCTION-STABLE</p>
+        </div>
+    </footer>
+
     <script>
         let walletAddress = null;
         let syncTimer = null;
+        let isDemoMode = false;
+        const DEMO_ADDR = "{DEMO_ADDRESS}";
 
-        // Auto-detect account changes in MetaMask/Coinbase Wallet
-        if (window.ethereum) {
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts.length > 0) {
+        function toggleDemo() {{
+            if(walletAddress && !isDemoMode) {{
+                if(!confirm("Switching to Demo will disconnect your current wallet. Proceed?")) return;
+            }}
+            isDemoMode = true;
+            walletAddress = DEMO_ADDR;
+            updateUIForIdentity("DEMO SYSTEM ACTIVE");
+        }}
+
+        async function toggleAuth() {{
+            if (typeof window.ethereum === 'undefined') {{
+                alert("Metamask or Coinbase Wallet required for institutional access.");
+                return;
+            }}
+            try {{
+                const accounts = await window.ethereum.request({{ method: 'eth_requestAccounts' }});
+                if (accounts.length > 0) {{
+                    isDemoMode = false;
                     walletAddress = accounts[0];
-                    updateUIForWallet();
-                } else {
-                    location.reload(); // Logged out
-                }
-            });
-        }
+                    updateUIForIdentity("AUTHENTICATED");
+                }}
+            }} catch (e) {{ console.error(e); }}
+        }}
 
-        function updateUIForWallet() {
+        function updateUIForIdentity(statusText) {{
             const btn = document.getElementById('authBtn');
-            btn.innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
-            btn.classList.add('bg-slate-800', 'text-white');
-            document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress;
-            document.getElementById('statusLabel').innerText = "AUTHENTICATED";
+            const displayAddr = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
+            
+            btn.innerText = isDemoMode ? "DEMO ACTIVE" : displayAddr;
+            btn.classList.toggle('bg-sky-600', isDemoMode);
+            btn.classList.toggle('bg-white', !isDemoMode);
+            
+            document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress.toUpperCase();
+            document.getElementById('statusLabel').innerText = statusText;
             document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
             startSync();
-        }
+        }}
 
-        function toggleDemo() {
-            walletAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-            document.getElementById('authBtn').innerText = "DEMO MODE";
-            updateUIForWallet();
-            document.getElementById('statusLabel').innerText = "DEMO ACTIVE";
-        }
-
-        async function toggleAuth() {
-            const btn = document.getElementById('authBtn');
-            if (typeof window.ethereum === 'undefined') {
-                btn.innerText = "NO WALLET FOUND";
-                return;
-            }
-            try {
-                btn.innerText = "CONNECTING...";
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                if (accounts.length > 0) {
-                    walletAddress = accounts[0];
-                    updateUIForWallet();
-                }
-            } catch (e) {
-                btn.innerText = "AUTH FAILED";
-            }
-        }
-
-        async function initKernel() {
+        async function initKernel() {{
             const amount = document.getElementById('amtRange').value;
             const btn = document.getElementById('deployBtn');
-            btn.innerText = "DEPLOYING...";
+            btn.innerText = "VERIFYING COLLATERAL...";
             btn.disabled = true;
 
-            try {
-                const res = await fetch('/activate', {
+            try {{
+                const res = await fetch('/activate', {{
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ address: walletAddress, amount: parseFloat(amount) })
-                });
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{ 
+                        address: walletAddress, 
+                        amount: parseFloat(amount),
+                        is_demo: isDemoMode
+                    }})
+                }});
                 const data = await res.json();
-                if (data.status === "success") {
+                if (data.status === "success") {{
                     btn.innerText = "KERNEL ACTIVE";
                     btn.classList.replace('accent-gradient', 'bg-emerald-600');
                     document.getElementById('statusLabel').innerText = "DEPLOYED";
-                    document.getElementById('statusLabel').classList.add('text-emerald-400');
-                } else {
+                }} else {{
                     btn.innerText = data.message.toUpperCase();
-                    setTimeout(() => { btn.innerText = "Initialize ALM Kernel"; btn.disabled = false; }, 3000);
-                }
-            } catch (e) { btn.innerText = "SERVER ERROR"; btn.disabled = false; }
-        }
+                    btn.classList.replace('accent-gradient', 'bg-red-900');
+                    setTimeout(() => {{ 
+                        btn.innerText = "Initialize ALM Kernel"; 
+                        btn.disabled = false; 
+                        btn.classList.add('accent-gradient');
+                        btn.classList.remove('bg-red-900');
+                    }}, 4000);
+                }}
+            }} catch (e) {{ btn.innerText = "SERVER ERROR"; btn.disabled = false; }}
+        }}
 
-        function startSync() {
+        function startSync() {{
             if (syncTimer) clearInterval(syncTimer);
-            syncTimer = setInterval(async () => {
+            syncTimer = setInterval(async () => {{
                 if (!walletAddress) return;
-                try {
+                try {{
                     const res = await fetch('/stats/' + walletAddress);
                     const data = await res.json();
-                    if (data.stats) {
+                    if (data.stats) {{
                         document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
-                        document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
-                    }
+                        document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {{minimumFractionDigits: 4}});
+                    }}
                     const logOutput = document.getElementById('logOutput');
                     logOutput.innerHTML = data.logs.map(l => `
-                        <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02] mb-2">
+                        <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02]">
                             <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
-                            <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                            <span class="text-slate-300 uppercase">${{l.split('KERNEL: ')[1] || l}}</span>
                         </div>
                     `).reverse().join('');
-                } catch (e) {}
-            }, 3000);
-        }
+                }} catch (e) {{}}
+            }}, 3000);
+        }}
     </script>
 </body>
 </html>
