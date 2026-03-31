@@ -13,17 +13,17 @@ app = FastAPI()
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-# Exact Checksummed Address to satisfy EIP-55
+
+# HARDCODED CHECKSUMMED ADDRESS (EIP-55)
 DEMO_ADDRESS_STR = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
-DEMO_ADDRESS = Web3.to_checksum_address(DEMO_ADDRESS_STR)
 
 w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
 ERC20_ABI = [
     {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
 ]
-usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=ERC20_ABI)
+usdc_contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
 
-audit_logs = ["VAULTLOGIC V3.7-STABLE: Industrial Gateway Ready."]
+audit_logs = ["VAULTLOGIC V3.8-STABLE: Industrial Gateway Ready."]
 
 class EngineInit(BaseModel):
     address: str
@@ -38,9 +38,13 @@ def add_log(msg):
 async def background_kernel_loop():
     while True:
         await asyncio.sleep(10)
+        # Periodic sync and kernel ticking
         for addr in list(kernel.active_deployments.keys()):
-            msg = kernel.active_deployments[addr].calculate_tick(10)
-            if msg: add_log(msg)
+            try:
+                msg = kernel.active_deployments[addr].calculate_tick(10)
+                if msg: add_log(msg)
+            except:
+                pass
 
 @app.on_event("startup")
 async def startup_event():
@@ -49,19 +53,22 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     try:
-        # Convert to checksum to avoid the SYNC_ERROR in logs
+        # Force checksum conversion immediately to solve the EIP-55 error
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
             "logs": audit_logs
         }
     except Exception as e:
-        return {"stats": None, "logs": audit_logs, "error": str(e)}
+        # If we still get a checksum error, we report it cleanly
+        return {"stats": None, "logs": audit_logs, "error": f"ADDR_ERR: {str(e)}"}
 
 @app.post("/activate")
 async def activate(data: EngineInit):
     try:
         target_address = Web3.to_checksum_address(data.address)
+        
+        # Floor check: $10,000 Minimum
         if data.amount < 10000:
             add_log(f"REJECTED: ${data.amount:,.2f} is below the Institutional Floor.")
             return {"status": "error", "message": "Below $10k Floor"}
@@ -78,7 +85,7 @@ async def activate(data: EngineInit):
         return {"status": "success", "validated_address": target_address}
     except Exception as e:
         add_log(f"NETWORK ERROR: {str(e)}")
-        return {"status": "error", "message": "Network/Validation Error"}
+        return {"status": "error", "message": "Address/Network Error"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
@@ -97,52 +104,69 @@ async def home():
         .accent-gradient {{ background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); }}
         .btn-shadow {{ box-shadow: 0 4px 14px 0 rgba(14, 165, 233, 0.39); }}
         input[type=range] {{ accent-color: #0ea5e9; }}
-        ::-webkit-scrollbar {{ width: 4px; }}
-        ::-webkit-scrollbar-thumb {{ background: #1e293b; border-radius: 10px; }}
         
-        .modal-enter {{ animation: modalFade 0.3s ease-out forwards; }}
-        @keyframes modalFade {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
+        .plaid-modal-enter {{ animation: slideUp 0.3s ease-out; }}
+        @keyframes slideUp {{ from {{ transform: translateY(20px); opacity: 0; }} to {{ transform: translateY(0); opacity: 1; }} }}
     </style>
 </head>
 <body class="p-6 md:p-10 min-h-screen flex flex-col">
-    <!-- Plaid Simulation Modal -->
-    <div id="plaidModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 backdrop-blur-md p-4">
-        <div class="glass max-w-md w-full p-8 rounded-3xl border border-white/10 modal-enter">
-            <div class="flex justify-between items-start mb-6">
-                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                    <svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M2 12c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12zm11-4h-2v1h2V8zm0 2h-2v6h2v-6z"/></svg>
+    <!-- Updated Plaid Simulation UI -->
+    <div id="plaidOverlay" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div id="plaidContainer" class="bg-white text-black max-w-sm w-full rounded-2xl overflow-hidden plaid-modal-enter shadow-2xl">
+            <!-- Header -->
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 bg-black rounded flex items-center justify-center">
+                        <div class="w-2 h-2 bg-white rounded-full"></div>
+                    </div>
+                    <span class="font-bold text-sm tracking-tight">Plaid</span>
                 </div>
-                <button onclick="closePlaid()" class="text-slate-500 hover:text-white transition-colors">✕</button>
+                <button onclick="closePlaid()" class="text-gray-400 hover:text-black">✕</button>
             </div>
-            <h2 class="text-xl font-bold mb-2">Select Your Institution</h2>
-            <p class="text-slate-400 text-xs mb-8">VaultLogic connects via Plaid to verify your banking credentials and enable secure USD settlement.</p>
-            
-            <div class="space-y-3 mb-8">
-                <!-- Selectable Banks -->
-                <div onclick="selectBank('CHASE MANHATTAN')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/50 transition-all group">
-                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">C</div>
-                    <div class="flex-grow">
-                        <span class="text-sm font-bold block">Chase Manhattan</span>
-                        <span class="text-[10px] text-slate-500">Checking •••• 9012</span>
+
+            <!-- Content Area (Switchable) -->
+            <div id="plaidContent" class="p-6">
+                <!-- Select Bank View -->
+                <div id="bankListView">
+                    <h2 class="text-xl font-semibold mb-1">Select your bank</h2>
+                    <p class="text-xs text-gray-500 mb-6">VaultLogic uses Plaid to link your account.</p>
+                    <div class="space-y-2">
+                        <div onclick="showLogin('Chase')" class="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                            <span class="font-medium text-sm">Chase</span>
+                            <span class="text-gray-300">→</span>
+                        </div>
+                        <div onclick="showLogin('Bank of America')" class="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                            <span class="font-medium text-sm">Bank of America</span>
+                            <span class="text-gray-300">→</span>
+                        </div>
+                        <div onclick="showLogin('Wells Fargo')" class="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                            <span class="font-medium text-sm">Wells Fargo</span>
+                            <span class="text-gray-300">→</span>
+                        </div>
                     </div>
                 </div>
-                <div onclick="selectBank('BANK OF AMERICA')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-red-500/20 hover:border-red-500/50 transition-all group">
-                    <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-bold">B</div>
-                    <div class="flex-grow">
-                        <span class="text-sm font-bold block">Bank of America</span>
-                        <span class="text-[10px] text-slate-500">Savings •••• 4452</span>
+
+                <!-- Login View -->
+                <div id="loginView" class="hidden">
+                    <h2 id="loginTitle" class="text-xl font-semibold mb-1">Log in to Bank</h2>
+                    <p class="text-xs text-gray-500 mb-6">Enter your credentials to link accounts.</p>
+                    <div class="space-y-3">
+                        <input type="text" placeholder="Username" class="w-full p-3 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="password" placeholder="Password" class="w-full p-3 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500">
+                        <button onclick="submitPlaidLogin()" class="w-full py-3 bg-black text-white rounded-xl font-bold text-sm mt-4">Submit</button>
                     </div>
                 </div>
-                <div onclick="selectBank('WELLS FARGO')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all group">
-                    <div class="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center text-white font-bold">W</div>
-                    <div class="flex-grow">
-                        <span class="text-sm font-bold block">Wells Fargo</span>
-                        <span class="text-[10px] text-slate-500">Business •••• 1182</span>
-                    </div>
+
+                <!-- Loading View -->
+                <div id="loadingView" class="hidden py-10 text-center">
+                    <div class="inline-block w-8 h-8 border-4 border-gray-200 border-t-black rounded-full animate-spin mb-4"></div>
+                    <p class="text-sm font-medium">Verifying with Institution...</p>
                 </div>
             </div>
             
-            <p class="text-center text-[9px] text-slate-600 uppercase tracking-widest">Plaid is end-to-end encrypted</p>
+            <div class="bg-gray-50 p-4 text-center">
+                <p class="text-[10px] text-gray-400 font-medium">PLAID • SECURE AND ENCRYPTED</p>
+            </div>
         </div>
     </div>
 
@@ -151,7 +175,7 @@ async def home():
             <div class="w-10 h-10 accent-gradient rounded-xl flex items-center justify-center text-white font-black text-xl italic">V</div>
             <div>
                 <h1 class="text-xl font-black italic tracking-tighter uppercase leading-none">VaultLogic</h1>
-                <p class="text-[8px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-1">Institutional Autopilot</p>
+                <p class="text-[8px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-1">Industrial Autopilot</p>
             </div>
         </div>
         <div class="flex items-center gap-4">
@@ -192,6 +216,7 @@ async def home():
                     <button id="deployBtn" onclick="initKernel()" class="w-full py-5 accent-gradient text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.2em] btn-shadow hover:scale-[1.02] active:scale-95 transition-all">
                         Initialize ALM Kernel
                     </button>
+                    <p class="text-[9px] text-center text-slate-600 uppercase tracking-widest">Min. Institutional Deposit: $10,000 USD</p>
                 </div>
             </div>
 
@@ -214,7 +239,7 @@ async def home():
             <div onclick="openPlaid()" class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5 max-w-sm">
                 <div>
                     <p id="bankStatusText" class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank (Plaid)</p>
-                    <p class="text-[9px] text-slate-500 mt-1">Non-custodial bank settlements</p>
+                    <p id="bankSubtext" class="text-[9px] text-slate-500 mt-1 uppercase tracking-wider">Non-custodial bank settlements</p>
                 </div>
                 <div id="bankStatusIcon" class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-xs group-hover:bg-white group-hover:text-black transition-all">→</div>
             </div>
@@ -222,7 +247,7 @@ async def home():
         <div id="demoContainer" class="text-right">
              <button id="demoBtn" onclick="toggleDemo()" class="text-slate-600 hover:text-sky-500 text-[10px] font-bold uppercase tracking-widest transition-colors">Access Demo Sandbox</button>
              <button id="stopDemoBtn" onclick="disconnect()" class="hidden bg-red-500/10 text-red-500 border border-red-500/20 px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Stop Demo & Exit Sandbox</button>
-             <p class="text-[9px] text-slate-700 mt-2 tracking-widest uppercase">VaultLogic V3.7 Core</p>
+             <p class="text-[9px] text-slate-700 mt-2 tracking-widest uppercase">VaultLogic V3.8 Core</p>
         </div>
     </footer>
 
@@ -230,40 +255,59 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
         let isDemoMode = false;
+        let activeBank = null;
         
-        // FIX: Using actual checksummed string to avoid SYNC_ERROR
+        // Exact checksummed address used in backend too
         const DEMO_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14";
 
         function openPlaid() {{
-            document.getElementById('plaidModal').classList.remove('hidden');
-            document.getElementById('plaidModal').classList.add('flex');
+            document.getElementById('plaidOverlay').classList.remove('hidden');
+            document.getElementById('plaidOverlay').classList.add('flex');
+            document.getElementById('bankListView').classList.remove('hidden');
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('loadingView').classList.add('hidden');
         }}
 
         function closePlaid() {{
-            document.getElementById('plaidModal').classList.add('hidden');
-            document.getElementById('plaidModal').classList.remove('flex');
+            document.getElementById('plaidOverlay').classList.add('hidden');
+            document.getElementById('plaidOverlay').classList.remove('flex');
         }}
 
-        function selectBank(bankName) {{
-            // Simulate the secure connection process
-            const btn = event.currentTarget;
-            btn.innerHTML = `<div class="w-full text-center py-2 text-sky-400 font-bold animate-pulse">VERIFYING WITH ${{bankName}}...</div>`;
+        function showLogin(bank) {{
+            activeBank = bank;
+            document.getElementById('bankListView').classList.add('hidden');
+            document.getElementById('loginTitle').innerText = "Log in to " + bank;
+            document.getElementById('loginView').classList.remove('hidden');
+        }}
+
+        function submitPlaidLogin() {{
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('loadingView').classList.remove('hidden');
             
             setTimeout(() => {{
                 closePlaid();
-                document.getElementById('bankStatusText').innerText = bankName + " LINKED";
+                // Generate a temporary VaultLogic Deposit Wallet Address for this bank session
+                const tempWallet = "0x" + Array.from({{length: 40}}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                
+                document.getElementById('bankStatusText').innerText = activeBank + " CONNECTED";
                 document.getElementById('bankStatusText').classList.add('text-emerald-400');
+                document.getElementById('bankSubtext').innerText = "Gateway Wallet: " + tempWallet.slice(0,10) + "...";
                 document.getElementById('bankStatusIcon').innerHTML = "✓";
                 document.getElementById('bankStatusIcon').classList.add('bg-emerald-500', 'text-white', 'border-none');
                 
-                const logOutput = document.getElementById('logOutput');
-                logOutput.innerHTML = `
-                    <div class="p-4 border-l-2 border-emerald-500 bg-emerald-500/5">
-                        <span class="text-emerald-500 font-bold uppercase mr-3">PLAID:</span>
-                        <span class="text-slate-300 uppercase">${{bankName}} VERIFIED. FIAT LIQUIDITY CHANNEL OPEN.</span>
-                    </div>
-                ` + logOutput.innerHTML;
-            }}, 1500);
+                addLocalLog("PLAID", `${{activeBank.toUpperCase()}} AUTHENTICATED. USD LIQUIDITY TUNNEL ACTIVE VIA ${{tempWallet.toUpperCase()}}.`);
+            }}, 1800);
+        }}
+
+        function addLocalLog(type, msg) {{
+            const logOutput = document.getElementById('logOutput');
+            const time = new Date().toLocaleTimeString('en-GB', {{ hour12: false }});
+            logOutput.innerHTML = `
+                <div class="p-4 border-l-2 border-emerald-500 bg-emerald-500/5">
+                    <span class="text-emerald-500 font-bold uppercase mr-3">PLAID:</span>
+                    <span class="text-slate-300 uppercase">[${{time}}] ${{msg}}</span>
+                </div>
+            ` + logOutput.innerHTML;
         }}
 
         function disconnect() {{
@@ -292,6 +336,7 @@ async def home():
             
             // Reset Bank Status
             document.getElementById('bankStatusText').innerText = "Connect Bank (Plaid)";
+            document.getElementById('bankSubtext').innerText = "Non-custodial bank settlements";
             document.getElementById('bankStatusText').classList.remove('text-emerald-400');
             document.getElementById('bankStatusIcon').innerHTML = "→";
             document.getElementById('bankStatusIcon').classList.remove('bg-emerald-500', 'text-white', 'border-none');
@@ -397,10 +442,16 @@ async def home():
                 try {{
                     const res = await fetch('/stats/' + walletAddress);
                     const data = await res.json();
+                    
+                    if (data.error) {{
+                        console.error("Backend Error:", data.error);
+                    }}
+
                     if (data.stats) {{
                         document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
                         document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {{minimumFractionDigits: 4}});
                     }}
+                    
                     const logOutput = document.getElementById('logOutput');
                     logOutput.innerHTML = data.logs.map(l => {{
                         const isPlaid = l.includes('PLAID:');
