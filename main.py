@@ -67,7 +67,6 @@ async def get_stats(address: str):
 
 @app.post("/activate")
 async def activate(data: EngineInit):
-    # Enforcement Logic: Bypass 10k restriction only for Sandbox
     if not data.is_sandbox and data.amount < 10000:
         add_log(f"REJECTED: ${data.amount:,.2f} is below the 10k institutional floor.")
         return {"status": "error", "message": "Rejected: <$10k Floor"}
@@ -107,6 +106,7 @@ async def home():
         }
         .status-pill { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
         .hidden-bank { display: none !important; }
+        .plaid-card:hover { transform: translateY(-2px); border-color: rgba(14, 165, 233, 0.4); }
     </style>
 </head>
 <body class="p-6 md:p-12 min-h-screen flex flex-col items-center">
@@ -115,7 +115,7 @@ async def home():
     <div id="walletModal" class="fixed inset-0 z-[600] hidden items-center justify-center bg-black/90 backdrop-blur-sm p-4">
         <div class="glass max-w-md w-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl">
             <div class="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                <h3 class="font-black text-lg uppercase italic tracking-tighter">Connect Identity</h3>
+                <h3 class="font-black text-lg uppercase italic tracking-tighter text-sky-400">Connect Identity</h3>
                 <button onclick="closeWallets()" class="text-slate-500 hover:text-white transition-colors">✕</button>
             </div>
             <div class="p-8 space-y-3">
@@ -131,6 +131,59 @@ async def home():
                     <div class="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center text-orange-500 font-bold text-[10px]">MASK</div>
                     <p class="text-[11px] font-black uppercase tracking-widest text-slate-300">MetaMask</p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plaid Simulation Modal -->
+    <div id="plaidModal" class="fixed inset-0 z-[700] hidden items-center justify-center bg-black/95 backdrop-blur-md p-4">
+        <div class="glass max-w-md w-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl">
+            <div class="p-8 border-b border-white/5 bg-white/[0.02]">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 bg-sky-500 rounded-full"></span>
+                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">VaultLogic | Plaid Auth</span>
+                    </div>
+                    <button onclick="closePlaid()" class="text-slate-500 hover:text-white">✕</button>
+                </div>
+                <h3 class="text-xl font-black italic uppercase tracking-tighter mb-4">Select Institution</h3>
+                <div class="relative">
+                    <input type="text" id="bankSearch" onkeyup="filterBanks()" placeholder="Search for your bank..." 
+                           class="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-[11px] font-bold tracking-widest focus:outline-none focus:border-sky-500/50 transition-all">
+                    <span class="absolute right-6 top-4 text-slate-500">🔍</span>
+                </div>
+            </div>
+            
+            <div class="p-8 space-y-3 max-h-[400px] overflow-y-auto custom-scroll" id="bankList">
+                <!-- Default Bank: Chase -->
+                <div onclick="selectBank('Chase')" class="plaid-card flex items-center gap-4 p-5 rounded-2xl cursor-pointer border border-white/5 bg-white/[0.01] transition-all">
+                    <div class="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg">C</div>
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-widest">Chase Bank</p>
+                        <p class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Personal & Business</p>
+                    </div>
+                </div>
+                <!-- Default Bank: BOA -->
+                <div onclick="selectBank('BOA')" class="plaid-card flex items-center gap-4 p-5 rounded-2xl cursor-pointer border border-white/5 bg-white/[0.01] transition-all">
+                    <div class="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg">B</div>
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-widest">Bank of America</p>
+                        <p class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Institutional Auth</p>
+                    </div>
+                </div>
+                <!-- Other simulated banks -->
+                <div class="bank-item opacity-40 hover:opacity-100 flex items-center gap-4 p-5 rounded-2xl cursor-pointer border border-white/5 bg-white/[0.01] transition-all">
+                    <div class="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-white font-black text-xs">W</div>
+                    <p class="text-[11px] font-black uppercase tracking-widest">Wells Fargo</p>
+                </div>
+                <div class="bank-item opacity-40 hover:opacity-100 flex items-center gap-4 p-5 rounded-2xl cursor-pointer border border-white/5 bg-white/[0.01] transition-all">
+                    <div class="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-white font-black text-xs">C</div>
+                    <p class="text-[11px] font-black uppercase tracking-widest">Citibank</p>
+                </div>
+            </div>
+            
+            <div class="p-8 bg-white/[0.02] border-t border-white/5 text-center">
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em]">End-to-End Encrypted Settlement Layer</p>
             </div>
         </div>
     </div>
@@ -162,17 +215,14 @@ async def home():
     </header>
 
     <main class="max-w-7xl w-full relative grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        <!-- Background Required Overlay -->
         <div id="blockOverlay" class="absolute inset-0 z-10 flex flex-col items-center pt-52 text-center pointer-events-none">
             <h2 class="text-4xl font-black italic uppercase text-slate-800/40 tracking-tighter">Connect Vault to Proceed</h2>
         </div>
 
-        <!-- Left Column: Controls -->
+        <!-- Left Column -->
         <div class="lg:col-span-4 space-y-6 flex flex-col h-full">
             <div id="strategyCard" class="glass p-10 rounded-[2.5rem] border border-white/5 opacity-10 blur-sm pointer-events-none transition-all flex-grow">
                 <h3 id="strategyLabel" class="text-[10px] font-black uppercase tracking-[0.5em] text-sky-500 mb-12 text-center">Deployment Controls</h3>
-                
                 <div class="space-y-14">
                     <div>
                         <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-6">
@@ -183,12 +233,11 @@ async def home():
                                class="w-full"
                                oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
                     </div>
-                    
                     <button id="deployBtn" onclick="initKernel()" class="w-full py-6 accent-gradient text-white font-black rounded-3xl text-[12px] uppercase tracking-[0.3em] shadow-2xl shadow-sky-500/10 active:scale-[0.98] transition-all">Initialize Engine</button>
                 </div>
             </div>
 
-            <!-- Plaid / Bank Link: Visible initially, hidden when Sandbox is clicked -->
+            <!-- Plaid / Bank Link Trigger -->
             <div id="plaidContainer" class="mt-auto transition-all duration-300">
                 <div onclick="openPlaid()" class="glass p-8 rounded-[2rem] border border-white/5 cursor-pointer hover:border-sky-500/30 transition-all flex items-center justify-between group bg-white/[0.01]">
                     <div class="flex items-center gap-5">
@@ -203,7 +252,7 @@ async def home():
             </div>
         </div>
 
-        <!-- Right Column: Terminal -->
+        <!-- Right Column -->
         <div id="mainTerminal" class="lg:col-span-8 glass p-12 rounded-[2.5rem] flex flex-col min-h-[680px] border border-white/5 opacity-10 blur-sm pointer-events-none transition-all">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                 <div class="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
@@ -215,7 +264,6 @@ async def home():
                     <h2 id="liveProfit" class="text-4xl font-black text-emerald-400 italic tracking-tighter tabular-nums">$0.0000</h2>
                 </div>
             </div>
-
             <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-8">
                 <div class="flex items-center gap-3">
                     <div class="w-1.5 h-1.5 bg-sky-500 rounded-full animate-ping"></div>
@@ -223,7 +271,6 @@ async def home():
                 </div>
                 <span id="auditBadge" class="text-[10px] font-bold text-slate-600 uppercase px-4 py-2 border border-white/5 rounded-2xl bg-white/[0.02]">Offline</span>
             </div>
-
             <div id="logOutput" class="font-mono text-[11px] space-y-4 flex-grow overflow-y-auto pr-6 custom-scroll"></div>
         </div>
     </main>
@@ -237,12 +284,30 @@ async def home():
         function closeWallets() { document.getElementById('walletModal').classList.replace('flex', 'hidden'); }
         
         function openPlaid() { 
+            document.getElementById('plaidModal').classList.replace('hidden', 'flex');
+        }
+        
+        function closePlaid() {
+            document.getElementById('plaidModal').classList.replace('flex', 'hidden');
+        }
+
+        function filterBanks() {
+            let input = document.getElementById('bankSearch').value.toLowerCase();
+            let items = document.querySelectorAll('.bank-item, .plaid-card');
+            items.forEach(item => {
+                let text = item.innerText.toLowerCase();
+                item.style.display = text.includes(input) ? "flex" : "none";
+            });
+        }
+
+        function selectBank(name) {
             const status = document.getElementById('bankStatusText');
-            status.innerText = "AUTHENTICATING...";
+            status.innerText = "LINKING " + name.toUpperCase() + "...";
+            closePlaid();
             setTimeout(() => {
-                status.innerText = "LINKED: CHASE PREMIER";
+                status.innerText = "LINKED: " + (name === 'BOA' ? 'BofA Institutional' : 'Chase Premier');
                 status.className = "text-[11px] font-black text-sky-400 uppercase tracking-widest";
-            }, 1500);
+            }, 1200);
         }
 
         function toggleSandbox() { 
@@ -264,7 +329,6 @@ async def home():
             document.getElementById('walletDisplay').classList.remove('hidden');
             document.getElementById('addrText').innerText = isSandbox ? "SANDBOX_MOCK" : walletAddress.slice(0,10) + "...";
             
-            // Hide Bank Account link if in Sandbox
             if(isSandbox) {
                 document.getElementById('plaidContainer').classList.add('hidden-bank');
                 document.getElementById('statusDot').className = 'w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse shadow-[0_0_8px_#f97316]';
@@ -272,13 +336,11 @@ async def home():
                 document.getElementById('strategyLabel').className = "text-[10px] font-black uppercase tracking-[0.5em] text-orange-500 mb-12 text-center";
                 document.getElementById('deployBtn').className = "w-full py-6 sandbox-gradient text-white font-black rounded-3xl text-[12px] uppercase tracking-[0.3em] shadow-2xl shadow-orange-500/10 active:scale-[0.98] transition-all";
             } else {
-                // Ensure it's visible for Live flow
                 document.getElementById('plaidContainer').classList.remove('hidden-bank');
             }
 
             document.getElementById('strategyCard').classList.remove('opacity-10', 'pointer-events-none', 'blur-sm');
             document.getElementById('mainTerminal').classList.remove('opacity-10', 'pointer-events-none', 'blur-sm');
-
             document.getElementById('auditBadge').innerText = "Active Sync";
             document.getElementById('auditBadge').className = "text-[10px] font-bold text-emerald-500 uppercase px-4 py-2 border border-emerald-500/20 bg-emerald-500/5 rounded-2xl animate-pulse";
             startSync();
@@ -307,14 +369,9 @@ async def home():
                 const res = await fetch('/activate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        address: walletAddress, 
-                        amount: amount, 
-                        is_sandbox: isSandbox 
-                    })
+                    body: JSON.stringify({ address: walletAddress, amount: amount, is_sandbox: isSandbox })
                 });
                 const data = await res.json();
-                
                 if (data.status === "success") {
                     btn.innerText = isSandbox ? "SANDBOX ENGINE ACTIVE" : "KERNEL ACTIVE";
                     btn.className = isSandbox 
@@ -325,10 +382,7 @@ async def home():
                     btn.className = "w-full py-6 bg-red-600 text-white font-black rounded-3xl text-[12px] uppercase tracking-[0.3em]";
                     btn.disabled = false;
                 }
-            } catch (e) {
-                btn.innerText = "SYNC ERROR";
-                btn.disabled = false;
-            }
+            } catch (e) { btn.innerText = "SYNC ERROR"; btn.disabled = false; }
         }
 
         function startSync() {
@@ -363,4 +417,3 @@ async def home():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-#ver 
