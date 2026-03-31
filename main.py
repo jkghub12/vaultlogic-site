@@ -11,24 +11,20 @@ import random
 class VaultLogicKernel:
     def __init__(self):
         self.active_deployments = {}
-        # Real-world base rates for USDC on Base (Aave/Morpho/Aerodrome)
         self.base_rates = {
-            "aave_v3": 0.042,     # 4.2% Supply APY
-            "morpho": 0.051,      # 5.1% Supply APY
-            "aerodrome": 0.124    # 12.4% LP Yield
+            "aave_v3": 0.042,
+            "morpho": 0.051,
+            "aerodrome": 0.124
         }
 
     def get_market_apy(self):
-        # Simulating live oracle feed with slight volatility
         drift = random.uniform(-0.001, 0.001)
-        # Weighted average of institutional paths
         return (self.base_rates["morpho"] * 0.6) + (self.base_rates["aave_v3"] * 0.4) + drift
 
     def get_stats(self, addr): 
         if addr in self.active_deployments:
             data = self.active_deployments[addr]
             elapsed = (datetime.now() - data['start_time']).total_seconds()
-            # Calculate real-time interest accrual
             annual_rate = self.get_market_apy()
             profit = data['principal'] * (annual_rate / (365 * 24 * 3600)) * elapsed
             return {
@@ -39,27 +35,18 @@ class VaultLogicKernel:
             }
         return None
 
-    def deploy(self, addr, amt, rpc):
+    def deploy(self, addr, amt):
         self.active_deployments[addr] = {
             "principal": amt,
             "start_time": datetime.now(),
             "strategy": "AGGRESSIVE_USDC"
         }
-        return f"DEPLOYED: Engine active for {addr[:8]}. Rebalancing threshold set to 0.5% drift."
+        return f"DEPLOYED: Engine active for {addr[:8]}. Principal: ${amt:,.2f}"
 
 kernel = VaultLogicKernel()
 app = FastAPI()
 
-# --- CONFIG ---
-DEMO_STRICT_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
-
-def to_strict_address(addr_str: str):
-    try:
-        return Web3.to_checksum_address(addr_str.strip())
-    except:
-        return addr_str
-
-audit_logs = ["VAULTLOGIC V4.3: Oracle Feed Synchronized."]
+audit_logs = ["VAULTLOGIC V4.3.1: Security Layer Active."]
 
 class EngineInit(BaseModel):
     address: str
@@ -73,21 +60,17 @@ def add_log(msg):
 
 @app.get("/stats/{address}")
 async def get_stats(address: str):
-    target = to_strict_address(address)
-    stats = kernel.get_stats(target)
-    if stats and random.random() > 0.92:
-        add_log(f"REBALANCE: Optimized liquidity spread across Morpho/Aave.")
+    stats = kernel.get_stats(address)
     return {"stats": stats, "logs": audit_logs}
 
 @app.post("/activate")
 async def activate(data: EngineInit):
-    # Strict Backend Enforcement of $10k Floor
-    if data.amount < 10000:
-        add_log(f"REJECTED: ${data.amount:,.2f} is below $10K Institutional Floor.")
-        return {"status": "error", "message": "Below $10k Floor"}
+    # Backend Enforcement: Must be > 10000
+    if data.amount <= 10000:
+        add_log(f"ALERT: Rejected deployment attempt of ${data.amount:,.2f} (Below 10k Floor).")
+        return {"status": "error", "message": "Rejected: <$10k Floor"}
     
-    target_address = to_strict_address(data.address)
-    msg = kernel.deploy(target_address, data.amount, "https://mainnet.base.org")
+    msg = kernel.deploy(data.address, data.amount)
     add_log(msg)
     return {"status": "success"}
 
@@ -149,7 +132,7 @@ async def home():
             <div class="w-12 h-12 accent-gradient rounded-2xl flex items-center justify-center text-white font-black text-2xl italic shadow-lg shadow-sky-500/20">V</div>
             <div>
                 <h1 class="text-2xl font-black italic uppercase tracking-tighter leading-none">VaultLogic</h1>
-                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-[0.4em] mt-1">System V4.3</p>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-[0.4em] mt-1">System V4.3.1</p>
             </div>
         </div>
         
@@ -170,24 +153,21 @@ async def home():
     </nav>
 
     <main class="max-w-7xl w-full relative">
-        <!-- Auth Overlay -->
         <div id="blockOverlay" class="absolute inset-0 z-50 flex flex-col items-center pt-40 text-center pointer-events-none">
             <h2 class="text-4xl font-black italic uppercase text-slate-800 tracking-tighter">Connection Required</h2>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-4 space-y-6">
-                <!-- Strategy Card -->
                 <div id="strategyCard" class="glass p-10 rounded-[2.5rem] border border-white/5 opacity-20 blur-md pointer-events-none transition-all">
                     <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-sky-500 mb-10 text-center opacity-80">Allocation Strategy</h3>
                     <div class="space-y-12">
                         <div>
                             <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-5">
-                                <span>Principal</span>
-                                <span id="amtVal" class="text-sky-400 font-mono text-sm">$10,000</span>
+                                <span>Target Principal</span>
+                                <span id="amtVal" class="text-sky-400 font-mono text-sm">$0</span>
                             </div>
-                            <!-- Slider goes from 0 to 1M to allow testing the 10k restriction -->
-                            <input type="range" id="amtRange" min="0" max="1000000" step="5000" value="10000" 
+                            <input type="range" id="amtRange" min="0" max="500000" step="1000" value="0" 
                                    class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none"
                                    oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
                         </div>
@@ -195,13 +175,12 @@ async def home():
                     </div>
                 </div>
 
-                <!-- Plaid Gateway (Hidden in Sandbox) -->
                 <div id="plaidContainer" class="hidden">
                     <div onclick="openPlaid()" class="glass p-8 rounded-[2rem] border border-white/5 cursor-pointer hover:border-sky-500/30 transition-all flex items-center justify-between group">
                         <div class="flex items-center gap-5">
                             <div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl grayscale group-hover:grayscale-0 transition-all">🏦</div>
                             <div>
-                                <p id="bankStatusText" class="text-[11px] font-black text-white uppercase tracking-widest">Link Bank</p>
+                                <p id="bankStatusText" class="text-[11px] font-black text-white uppercase tracking-widest">Link Bank Account</p>
                                 <p class="text-[9px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Fiat Settlement</p>
                             </div>
                         </div>
@@ -210,7 +189,6 @@ async def home():
                 </div>
             </div>
 
-            <!-- Terminal -->
             <div id="mainTerminal" class="lg:col-span-8 glass p-10 rounded-[2.5rem] flex flex-col min-h-[600px] border border-white/5 opacity-20 blur-md pointer-events-none transition-all">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                     <div class="p-6 rounded-3xl bg-white/[0.02] border border-white/5">
@@ -223,7 +201,7 @@ async def home():
                     </div>
                 </div>
                 <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-8">
-                    <span class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Real-Time Audit Terminal</span>
+                    <span class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Institutional Audit Log</span>
                     <span id="auditBadge" class="text-[10px] font-bold text-slate-600 uppercase px-3 py-1.5 border border-white/5 rounded-xl">Offline</span>
                 </div>
                 <div id="logOutput" class="font-mono text-[11px] space-y-4 flex-grow overflow-y-auto pr-4 custom-scroll"></div>
@@ -235,14 +213,13 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
         let isSandbox = false;
-        const DEMO_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14";
 
         function openWallets() { document.getElementById('walletModal').classList.replace('hidden', 'flex'); }
         function closeWallets() { document.getElementById('walletModal').classList.replace('flex', 'hidden'); }
-        function openPlaid() { alert("Connecting to Plaid Gateway..."); document.getElementById('bankStatusText').innerText = "CONNECTED"; }
+        function openPlaid() { alert("Plaid Integration Active"); document.getElementById('bankStatusText').innerText = "CONNECTED"; }
 
         function toggleDemo() { 
-            walletAddress = DEMO_ADDR; 
+            walletAddress = "SANDBOX_USER_" + Math.random().toString(16).slice(2,8);
             isSandbox = true; 
             onAuthSuccess(); 
         }
@@ -258,13 +235,12 @@ async def home():
             document.getElementById('authGroup').classList.add('hidden');
             document.getElementById('blockOverlay').classList.add('hidden');
             document.getElementById('walletDisplay').classList.remove('hidden');
-            document.getElementById('addrText').innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
+            document.getElementById('addrText').innerText = walletAddress.slice(0,8).toUpperCase();
             
-            // Unlock UI
             document.getElementById('strategyCard').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
             document.getElementById('mainTerminal').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
 
-            // Plaid visibility: Only show if NOT sandbox
+            // Link Bank visibility logic
             const plaid = document.getElementById('plaidContainer');
             if (isSandbox) {
                 plaid.classList.add('hidden');
@@ -274,7 +250,6 @@ async def home():
 
             document.getElementById('auditBadge').innerText = "Active Sync";
             document.getElementById('auditBadge').className = "text-[10px] font-bold text-emerald-500 uppercase px-3 py-1.5 border border-emerald-500/20 bg-emerald-500/5 rounded-xl animate-pulse";
-            
             startSync();
         }
 
@@ -282,11 +257,11 @@ async def home():
             const amount = parseFloat(document.getElementById('amtRange').value);
             const btn = document.getElementById('deployBtn');
 
-            // Frontend check for $10k floor
-            if (amount < 10000) {
+            // REJECTION LOGIC: Must be GREATER than 10000
+            if (amount <= 10000) {
                 const oldText = btn.innerText;
                 const oldColor = btn.className;
-                btn.innerText = "ERROR: MIN $10K REQUIRED";
+                btn.innerText = "REJECTED: BELOW $10K FLOOR";
                 btn.className = "w-full py-6 bg-red-600 text-white font-black rounded-2xl text-[12px] uppercase";
                 setTimeout(() => {
                     btn.innerText = oldText;
@@ -295,7 +270,7 @@ async def home():
                 return;
             }
 
-            btn.innerText = "INITIALIZING...";
+            btn.innerText = "VERIFYING FUNDS...";
             btn.disabled = true;
 
             const res = await fetch('/activate', {
@@ -329,12 +304,12 @@ async def home():
                     if (data.logs) {
                         document.getElementById('logOutput').innerHTML = data.logs.map(l => `
                             <div class="flex gap-4 p-4 border-l-2 border-white/5 items-start">
-                                <span class="text-sky-500 font-black opacity-40">AUDIT</span>
+                                <span class="text-sky-500 font-black opacity-40">SYSTEM</span>
                                 <span class="text-slate-300 uppercase font-bold tracking-tight text-[10px]">${l.split('KERNEL: ')[1] || l}</span>
                             </div>`).reverse().join('');
                     }
                 } catch (e) {}
-            }, 2500);
+            }, 2000);
         }
     </script>
 </body>
