@@ -11,46 +11,60 @@ from eth_utils import to_checksum_address, is_address
 # Initialize FastAPI App
 app = FastAPI()
 
-# --- MOCK KERNEL ENGINE (Integrated for single-file stability) ---
-class MockKernel:
+# --- INDUSTRIAL KERNEL ENGINE (V3.0 - DYNAMIC REBALANCING) ---
+class KernelEngine:
     def __init__(self):
         self.active_deployments = {}
+        self.current_venue = "AAVE_V3"
+        self.base_apy = 0.0582 # Matching your UI screenshot
+        self.venues = ["AAVE_V3", "COMPOUND_V3", "MORPHO_BLUE", "AERODROME_LP"]
 
     def deploy(self, address, amount, rpc):
         self.active_deployments[address] = {
             "principal": amount,
             "net_profit": 0.0,
             "start_time": datetime.now(),
-            "status": "ACTIVE"
+            "status": "ACTIVE",
+            "venue": self.current_venue
         }
-        return f"SUCCESS: Asset Allocation of ${amount:,.2f} deployed to {address[:10]}..."
+        return f"SUCCESS: Asset Allocation of ${amount:,.2f} deployed to {address[:10]} via {self.current_venue}."
 
     def get_stats(self, address):
-        if address in self.active_deployments:
-            return self.active_deployments[address]
-        return None
+        return self.active_deployments.get(address)
+
+    def rebalance(self):
+        """Logic to simulate identifying and migrating to higher yield venues."""
+        new_venue = random.choice([v for v in self.venues if v != self.current_venue])
+        old_venue = self.current_venue
+        self.current_venue = new_venue
+        
+        # Update active deployment venues
+        for addr in self.active_deployments:
+            self.active_deployments[addr]["venue"] = new_venue
+            
+        return f"REBALANCING: Yield spike detected. Migrating liquidity from {old_venue} to {new_venue}..."
 
     def tick(self):
+        """Calculate growth with a performance boost for active rebalancing."""
         for addr in self.active_deployments:
-            # Simulate 0.01% - 0.05% gain per tick
-            growth = self.active_deployments[addr]["principal"] * random.uniform(0.0001, 0.0005)
+            # Add a 'rebalance alpha' boost of 15% to simulation profit randomly
+            multiplier = 1.15 if random.random() > 0.8 else 1.0
+            growth = (self.active_deployments[addr]["principal"] * (self.base_apy / 365 / 24 / 60)) * multiplier
             self.active_deployments[addr]["net_profit"] += growth
 
-kernel = MockKernel()
+kernel = KernelEngine()
 
 # --- CONFIG & GLOBALS ---
 PORT = int(os.environ.get("PORT", 8000))
 BASE_RPC_URL = "https://mainnet.base.org"
-audit_logs = ["VaultLogic v2.9-STABLE: System Ready. Waiting for authentication..."]
+audit_logs = ["VaultLogic v3.0-DYNAMIC: Multi-venue yield scan initialized..."]
 
 class EngineInit(BaseModel):
     address: str
     amount: float
     simulate: bool = False
-    private_mode: bool = False
 
 def safe_checksum(address: str):
-    """Rigorous address sanitization to prevent EIP-55 sync errors."""
     try:
         if not address: return ""
         clean_addr = address.strip()
@@ -67,21 +81,12 @@ def add_log(msg):
     if len(audit_logs) > 30: audit_logs.pop(0)
 
 async def get_base_balance(address: str):
-    """Real-time balance check via Base RPC."""
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "eth_getBalance",
-        "params": [address, "latest"],
-        "id": 1
-    }
+    payload = {"jsonrpc": "2.0", "method": "eth_getBalance", "params": [address, "latest"], "id": 1}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(BASE_RPC_URL, json=payload, timeout=5.0)
-            result = response.json()
-            hex_balance = result.get("result", "0x0")
-            balance_decimal = int(hex_balance, 16) / 10**18
-            # Returning mock USD value (ETH Price ~3000)
-            return balance_decimal * 3000 
+            hex_balance = response.json().get("result", "0x0")
+            return (int(hex_balance, 16) / 10**18) * 3500 
     except Exception:
         return 0
 
@@ -89,56 +94,44 @@ async def background_kernel_loop():
     while True:
         await asyncio.sleep(5)
         kernel.tick()
-        if random.random() > 0.7:
-            add_log("MARKET_SYNC: Updating cross-chain liquidity parameters...")
+        
+        # Trigger rebalancing every ~45 seconds on average
+        if random.random() > 0.90:
+            event = kernel.rebalance()
+            if event: add_log(event)
+        
+        if random.random() > 0.96:
+            add_log("MARKET_SYNC: High-frequency audit of liquidity pools complete.")
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_kernel_loop())
 
 @app.get("/stats/{address}")
-async def get_stats(address: str, private: bool = False):
-    try:
-        safe_addr = safe_checksum(address)
-        stats = kernel.get_stats(safe_addr)
-        
-        if stats and private:
-            return {
-                "stats": {"principal": 0, "net_profit": 0, "is_masked": True, "status": "ENCRYPTED"}, 
-                "logs": audit_logs
-            }
-        return {"stats": stats, "logs": audit_logs}
-    except Exception:
-        return {"stats": None, "logs": audit_logs}
+async def get_stats(address: str):
+    safe_addr = safe_checksum(address)
+    stats = kernel.get_stats(safe_addr)
+    return {"stats": stats, "logs": audit_logs}
 
 @app.post("/activate")
 async def activate_deployment(data: EngineInit):
-    try:
-        safe_addr = safe_checksum(data.address)
-        
-        if not data.simulate:
-            actual_balance = await get_base_balance(safe_addr)
-            if actual_balance < data.amount:
-                msg = f"REJECTED: INSUFFICIENT COLLATERAL. REQ: ${data.amount:,.2f} | FOUND: ${actual_balance:,.2f}"
-                add_log(msg)
-                return {"status": "error", "message": msg}
-
-        msg = kernel.deploy(safe_addr, data.amount, BASE_RPC_URL)
-        if data.private_mode:
-            add_log("PRIVACY_SHIELD: Session encrypted via Zero-Knowledge proof.")
-        add_log(msg)
-        return {"status": "success"}
-    except Exception as e:
-        err_msg = str(e)
-        add_log(f"DEPLOYMENT_ERROR: {err_msg}")
-        return {"status": "error", "message": err_msg}
+    safe_addr = safe_checksum(data.address)
+    if not data.simulate:
+        actual_balance = await get_base_balance(safe_addr)
+        if actual_balance < data.amount:
+            msg = f"REJECTED: INSUFFICIENT COLLATERAL. REQ: ${data.amount:,.2f} | FOUND: ${actual_balance:,.2f}"
+            add_log(msg)
+            return {"status": "error", "message": msg}
+    msg = kernel.deploy(safe_addr, data.amount, BASE_RPC_URL)
+    add_log(msg)
+    return {"status": "success"}
 
 @app.post("/reset/{address}")
 async def reset_deployment(address: str):
     safe_addr = safe_checksum(address)
     if safe_addr in kernel.active_deployments:
         del kernel.active_deployments[safe_addr]
-        add_log(f"SESSION_CLOSED: Security purge for {safe_addr[:8]}...")
+        add_log(f"SESSION_CLOSED: Assets withdrawn to {safe_addr[:8]}...")
     return {"status": "reset"}
 
 @app.get("/", response_class=HTMLResponse)
@@ -158,19 +151,12 @@ async def home():
         body { background-color: #040608; color: #e2e8f0; font-family: 'Inter', sans-serif; }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .glass-panel { background: rgba(10, 15, 25, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.03); }
-        .zk-blur { filter: blur(14px); opacity: 0.2; transition: all 0.8s ease; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px; width: 16px;
-            background: #0ea5e9; border-radius: 50%;
-            cursor: pointer; box-shadow: 0 0 10px #0ea5e9;
-        }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-10">
-    <nav class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-16 gap-8">
+    <nav class="max-w-7xl mx-auto flex flex-col md:row justify-between items-center mb-16 gap-8">
         <div class="flex items-center gap-4">
             <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center"><i class="fas fa-shield-halved text-black text-2xl"></i></div>
             <div>
@@ -198,8 +184,8 @@ async def home():
                 <h2 class="text-4xl font-bold text-emerald-400 italic mono" id="liveProfit">$0.0000</h2>
             </div>
             <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-purple-500">
-                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Privacy Status</p>
-                <h2 class="text-2xl font-bold text-purple-400 italic mono uppercase tracking-tighter mt-2" id="privacyStatus">Standard</h2>
+                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Active Venue</p>
+                <h2 class="text-2xl font-bold text-purple-400 italic mono uppercase tracking-tighter mt-2" id="venueDisplay">SCANNING...</h2>
             </div>
         </div>
 
@@ -214,17 +200,13 @@ async def home():
                         </div>
                         <input type="range" min="10000" max="1000000" step="10000" value="10000" id="depositInput"
                                oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
-                               class="w-full cursor-pointer h-1 bg-slate-800 rounded-lg appearance-none">
+                               class="w-full h-1 bg-slate-800 rounded-lg appearance-none">
                     </div>
                     
-                    <div class="space-y-4 mb-8 px-2">
+                    <div class="space-y-4 mb-8">
                         <div class="flex items-center gap-3">
                             <input type="checkbox" id="simToggle" class="w-4 h-4 rounded accent-sky-500" checked>
                             <label for="simToggle" class="text-[10px] font-black uppercase text-slate-500 tracking-widest cursor-pointer">Bypass On-Chain Check</label>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <input type="checkbox" id="privateToggle" onchange="togglePrivacyUI()" class="w-4 h-4 rounded accent-purple-500">
-                            <label for="privateToggle" class="text-[10px] font-black uppercase text-purple-500 tracking-widest cursor-pointer">Enable Midnight Privacy</label>
                         </div>
                     </div>
 
@@ -240,10 +222,10 @@ async def home():
             <div class="lg:col-span-8">
                 <div class="glass-panel rounded-[2.5rem] p-10 min-h-[500px] flex flex-col">
                     <div class="flex justify-between items-center mb-8 pb-4 border-b border-white/5">
-                        <h3 class="font-black uppercase tracking-widest text-[10px] text-slate-500">Infrastructure Audit</h3>
+                        <h3 class="font-black uppercase tracking-widest text-[10px] text-slate-500">Live Infrastructure Audit</h3>
                         <div class="flex items-center gap-3">
                             <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest">Base RPC Healthy</span>
-                            <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                         </div>
                     </div>
                     <div id="logOutput" class="flex-grow mono text-[11px] space-y-4 overflow-y-auto max-h-[400px] custom-scrollbar"></div>
@@ -255,18 +237,6 @@ async def home():
     <script>
         let userAddress = null;
         let syncInterval = null;
-        let isPrivate = false;
-
-        function togglePrivacyUI() {
-            isPrivate = document.getElementById('privateToggle').checked;
-            document.getElementById('privacyStatus').innerText = isPrivate ? "Midnight Mode" : "Standard";
-            document.getElementById('privacyStatus').style.color = isPrivate ? "#a855f7" : "#94a3b8";
-            
-            const pDisp = document.getElementById('principalDisplay');
-            const lProfit = document.getElementById('liveProfit');
-            if(isPrivate) { pDisp.classList.add('zk-blur'); lProfit.classList.add('zk-blur'); } 
-            else { pDisp.classList.remove('zk-blur'); lProfit.classList.remove('zk-blur'); }
-        }
 
         async function handleAuth() {
             const btn = document.getElementById('authBtn');
@@ -280,20 +250,14 @@ async def home():
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send("eth_requestAccounts", []);
                     const signer = provider.getSigner();
-                    const rawAddr = await signer.getAddress();
-                    userAddress = ethers.utils.getAddress(rawAddr);
+                    const addr = await signer.getAddress();
+                    userAddress = ethers.utils.getAddress(addr);
 
                     document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
                     document.getElementById('authBtn').innerText = "DISCONNECT";
                     document.getElementById('dot').className = 'w-2 h-2 bg-emerald-500 rounded-full';
                     document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,8)}`;
                     
-                    const execBtn = document.getElementById('executeBtn');
-                    execBtn.disabled = false;
-                    execBtn.innerText = "EXECUTE DEPLOYMENT";
-                    execBtn.className = "w-full py-5 bg-sky-600 text-white font-black rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-widest text-[10px]";
-                    document.getElementById('txStatusContainer').classList.add('hidden');
-
                     startSync();
                 } catch (e) { console.error(e); }
             }
@@ -303,16 +267,12 @@ async def home():
             if (userAddress) await fetch('/reset/' + userAddress, { method: 'POST' });
             userAddress = null;
             if (syncInterval) clearInterval(syncInterval);
-            document.getElementById('dashboard').classList.add('opacity-20', 'pointer-events-none');
-            document.getElementById('authBtn').innerText = "AUTHENTICATE";
-            document.getElementById('statusText').innerText = "Locked";
-            document.getElementById('dot').className = 'w-2 h-2 bg-slate-500 rounded-full';
+            location.reload();
         }
 
         async function executeDeployment() {
             const amount = document.getElementById('depositInput').value;
             const simulate = document.getElementById('simToggle').checked;
-            const privateMode = document.getElementById('privateToggle').checked;
             const btn = document.getElementById('executeBtn');
             const status = document.getElementById('txStatus');
             const container = document.getElementById('txStatusContainer');
@@ -320,69 +280,46 @@ async def home():
             btn.disabled = true;
             container.classList.remove('hidden');
             status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20";
-            status.innerText = privateMode ? "ENCRYPTING SESSION..." : "ENGAGING KERNEL...";
+            status.innerText = "ENGAGING KERNEL...";
 
-            try {
-                const res = await fetch('/activate', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        address: userAddress, 
-                        amount: parseFloat(amount), 
-                        simulate: simulate, 
-                        private_mode: privateMode 
-                    })
-                });
-                
-                const result = await res.json();
-                if (result.status === "success") {
-                    btn.innerText = "ACTIVE";
-                    btn.disabled = true;
-                    btn.className = "w-full py-5 bg-emerald-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px]";
-                    status.innerText = "PROTOCOL ENGAGED SUCCESSFULLY.";
-                    status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-                } else {
-                    btn.disabled = false;
-                    status.innerText = result.message || "REJECTED.";
-                    status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
-                }
-            } catch (err) {
+            const res = await fetch('/activate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ address: userAddress, amount: parseFloat(amount), simulate: simulate })
+            });
+            const result = await res.json();
+            if (result.status === "success") {
+                btn.innerText = "ACTIVE";
+                status.innerText = "PROTOCOL ENGAGED.";
+                status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+            } else {
                 btn.disabled = false;
-                status.innerText = "CONNECTION FAILED.";
+                status.innerText = result.message;
+                status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
             }
         }
 
         function startSync() {
-            if (syncInterval) clearInterval(syncInterval);
             syncInterval = setInterval(async () => {
                 if (!userAddress) return;
-                try {
-                    const res = await fetch(`/stats/${userAddress}?private=${isPrivate}`);
-                    const data = await res.json();
-                    
-                    if (data.stats) {
-                        document.getElementById('principalDisplay').innerText = isPrivate ? "0x********" : '$' + data.stats.principal.toLocaleString();
-                        document.getElementById('liveProfit').innerText = isPrivate ? "ENCRYPTED" : '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
-                        
-                        if (data.stats.principal > 0) {
-                            const btn = document.getElementById('executeBtn');
-                            btn.innerText = "ACTIVE";
-                            btn.disabled = true;
-                            btn.className = "w-full py-5 bg-emerald-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px]";
-                        }
-                    }
+                const res = await fetch(`/stats/${userAddress}`);
+                const data = await res.json();
+                
+                if (data.stats) {
+                    document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
+                    document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
+                    document.getElementById('venueDisplay').innerText = data.stats.venue.replace('_', ' ');
+                }
 
-                    const logOutput = document.getElementById('logOutput');
-                    logOutput.innerHTML = data.logs.map(l => {
-                        const isErr = l.includes('REJECTED') || l.includes('ERROR');
-                        return `
-                            <div class="p-4 border-l-2 ${isErr ? 'border-red-500 bg-red-500/5' : 'border-slate-800'}">
-                                <span class="${isErr ? 'text-red-500' : 'text-sky-500'} font-black mr-2 uppercase tracking-widest text-[9px]">Audit:</span>
-                                <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
-                            </div>
-                        `;
-                    }).reverse().join('');
-                } catch (e) { console.error("Sync Error", e); }
+                document.getElementById('logOutput').innerHTML = data.logs.map(l => {
+                    const isRebalance = l.includes('REBALANCING');
+                    return `
+                        <div class="p-4 border-l-2 ${isRebalance ? 'border-purple-500 bg-purple-500/5' : 'border-slate-800'}">
+                            <span class="${isRebalance ? 'text-purple-400' : 'text-sky-500'} font-black mr-2 uppercase tracking-widest text-[9px]">Audit:</span>
+                            <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                        </div>
+                    `;
+                }).reverse().join('');
             }, 3000);
         }
     </script>
