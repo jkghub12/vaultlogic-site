@@ -1,4 +1,5 @@
 import asyncio
+import random
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -11,10 +12,7 @@ app = FastAPI()
 
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
-USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-ERC20_ABI = [
-    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
-]
+w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
 
 # Global Logs for the UI
 audit_logs = ["VaultLogic v2.1-LIVE: System Ready. Waiting for Authentication..."]
@@ -32,8 +30,11 @@ async def background_kernel_loop():
     """Ticking the engine every 10 seconds for all active users."""
     while True:
         await asyncio.sleep(10)
-        # Check all active deployments for updates
         for addr in list(kernel.active_deployments.keys()):
+            # Trigger rate refresh every few ticks
+            if random.random() > 0.8:
+                kernel.active_deployments[addr].refresh_market_rates()
+            
             msg = kernel.active_deployments[addr].calculate_tick(10)
             if msg: add_log(msg)
 
@@ -44,22 +45,33 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     """API for the frontend to poll status and logs."""
-    return {
-        "stats": kernel.get_stats(address),
-        "logs": audit_logs
-    }
+    try:
+        # Crucial: Ensure address is checksummed for dict lookup
+        safe_addr = Web3.to_checksum_address(address)
+        return {
+            "stats": kernel.get_stats(safe_addr),
+            "logs": audit_logs
+        }
+    except:
+        return {"stats": None, "logs": audit_logs}
 
 @app.post("/activate")
 async def activate(data: EngineInit):
     """Endpoint to trigger the deployment of a new ALM strategy."""
-    # Institutional Check
-    if data.amount < 10000:
-        add_log(f"CRITICAL REJECTION: ${data.amount:,.2f} is below the Institutional Floor.")
-        return {"status": "error", "message": "Below $10k Floor"}
+    try:
+        # Fix for Checksum Error: Convert user input address immediately
+        target_address = Web3.to_checksum_address(data.address)
+        
+        if data.amount < 10000:
+            add_log(f"CRITICAL REJECTION: ${data.amount:,.2f} is below the Institutional Floor.")
+            return {"status": "error", "message": "Below $10k Floor"}
 
-    msg = kernel.deploy(data.address, data.amount, BASE_RPC_URL)
-    add_log(msg)
-    return {"status": "success"}
+        msg = kernel.deploy(target_address, data.amount, BASE_RPC_URL)
+        add_log(msg)
+        return {"status": "success", "validated_address": target_address}
+    except Exception as e:
+        add_log(f"VALIDATION ERROR: {str(e)}")
+        return {"status": "error", "message": "Invalid Checksum"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
@@ -110,7 +122,7 @@ async def home():
             <div class="glass p-8 rounded-3xl relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Kernel Status</p>
-                <h2 id="statusLabel" class="text-4xl font-black text-white italic uppercase tracking-tighter">AUTHENTICATED</h2>
+                <h2 id="statusLabel" class="text-4xl font-black text-white italic uppercase tracking-tighter">STANDBY</h2>
             </div>
         </div>
 
@@ -135,7 +147,10 @@ async def home():
 
             <div class="lg:col-span-8 glass p-10 rounded-3xl">
                 <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
-                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Real-Time Audit Terminal</p>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Real-Time Audit Terminal</p>
+                        <p id="activeWallet" class="text-[9px] text-slate-600 mt-1 font-mono uppercase">Not Connected</p>
+                    </div>
                     <div class="flex gap-2">
                         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                         <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Live Sync</span>
@@ -151,8 +166,10 @@ async def home():
         let syncTimer = null;
 
         function toggleDemo() {
-            walletAddress = "0xDEMO_USER_001";
+            walletAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"; // Standard Demo Checksummed Addr
             document.getElementById('authBtn').innerText = "DEMO MODE";
+            document.getElementById('statusLabel').innerText = "DEMO ACTIVE";
+            document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress;
             document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
             startSync();
         }
@@ -161,14 +178,12 @@ async def home():
             const btn = document.getElementById('authBtn');
             if (!walletAddress) {
                 if (typeof window.ethereum === 'undefined') {
-                    btn.innerText = "DOWNLOAD METAMASK";
+                    btn.innerText = "NO WALLET FOUND";
                     return;
                 }
                 try {
                     btn.innerText = "CONNECTING...";
                     btn.disabled = true;
-
-                    // Try direct account request first
                     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     
                     if (accounts.length > 0) {
@@ -176,12 +191,13 @@ async def home():
                         btn.innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
                         btn.classList.add('bg-slate-800', 'text-white');
                         btn.disabled = false;
+                        document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress;
+                        document.getElementById('statusLabel').innerText = "AUTHENTICATED";
                         document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
                         startSync();
                     }
                 } catch (e) {
-                    console.error("Auth Error", e);
-                    btn.innerText = "RETRY AUTH";
+                    btn.innerText = "AUTH FAILED";
                     btn.disabled = false;
                 }
             } else { location.reload(); }
@@ -203,16 +219,19 @@ async def home():
                 if (data.status === "success") {
                     btn.innerText = "KERNEL ACTIVE";
                     btn.classList.replace('accent-gradient', 'bg-emerald-600');
+                    document.getElementById('statusLabel').innerText = "DEPLOYED";
+                    document.getElementById('statusLabel').classList.add('text-emerald-400');
                 } else {
                     btn.innerText = data.message.toUpperCase();
                     setTimeout(() => { btn.innerText = "Initialize ALM Kernel"; btn.disabled = false; }, 3000);
                 }
-            } catch (e) { btn.innerText = "RPC ERROR"; btn.disabled = false; }
+            } catch (e) { btn.innerText = "SERVER ERROR"; btn.disabled = false; }
         }
 
         function startSync() {
             if (syncTimer) clearInterval(syncTimer);
             syncTimer = setInterval(async () => {
+                if (!walletAddress) return;
                 try {
                     const res = await fetch('/stats/' + walletAddress);
                     const data = await res.json();
@@ -222,7 +241,7 @@ async def home():
                     }
                     const logOutput = document.getElementById('logOutput');
                     logOutput.innerHTML = data.logs.map(l => `
-                        <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02]">
+                        <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02] mb-2">
                             <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
                             <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
                         </div>
