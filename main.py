@@ -35,13 +35,15 @@ class VaultLogicKernel:
             }
         return None
 
-    def deploy(self, addr, amt):
+    def deploy(self, addr, amt, mode):
         self.active_deployments[addr] = {
             "principal": amt,
             "start_time": datetime.now(),
-            "strategy": "AGGRESSIVE_USDC"
+            "strategy": "AGGRESSIVE_USDC",
+            "mode": mode
         }
-        return f"DEPLOYED: Engine active for {addr[:8]}. Principal: ${amt:,.2f}"
+        tag = "[SANDBOX]" if mode == "sandbox" else "[LIVE]"
+        return f"{tag} DEPLOYED: Engine active for {addr[:8]}. Principal: ${amt:,.2f}"
 
 kernel = VaultLogicKernel()
 app = FastAPI()
@@ -51,7 +53,7 @@ audit_logs = ["VAULTLOGIC V4.3.1: Security Layer Active."]
 class EngineInit(BaseModel):
     address: str
     amount: float
-    is_demo: bool = False
+    is_sandbox: bool = False
 
 def add_log(msg):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -65,14 +67,15 @@ async def get_stats(address: str):
 
 @app.post("/activate")
 async def activate(data: EngineInit):
-    # Backend Enforcement: Must be > 10000
-    if data.amount <= 10000:
-        add_log(f"ALERT: Rejected deployment attempt of ${data.amount:,.2f} (Below 10k Floor).")
+    # Enforcement Logic
+    if not data.is_sandbox and data.amount <= 10000:
+        add_log(f"ALERT: Rejected live deployment of ${data.amount:,.2f} (Below 10k Floor).")
         return {"status": "error", "message": "Rejected: <$10k Floor"}
     
-    msg = kernel.deploy(data.address, data.amount)
+    mode = "sandbox" if data.is_sandbox else "live"
+    msg = kernel.deploy(data.address, data.amount, mode)
     add_log(msg)
-    return {"status": "success"}
+    return {"status": "success", "mode": mode}
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
@@ -139,7 +142,7 @@ async def home():
         <div class="flex items-center gap-3">
             <div id="walletDisplay" class="hidden glass px-5 py-2.5 rounded-2xl flex items-center gap-4 border border-white/10">
                 <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <div id="statusDot" class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                     <span id="addrText" class="text-[11px] font-mono font-bold text-slate-300">0x...</span>
                 </div>
                 <button onclick="location.reload()" class="text-[10px] font-black text-red-400 hover:text-red-500 uppercase tracking-widest ml-2">Disconnect</button>
@@ -147,7 +150,7 @@ async def home():
             <div id="authGroup" class="flex items-center gap-4">
                 <button onclick="openWallets()" class="bg-white text-black px-8 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all">Connect</button>
                 <div class="h-8 w-[1px] bg-white/10"></div>
-                <button onclick="toggleDemo()" class="text-slate-500 hover:text-sky-400 font-black text-[10px] uppercase tracking-widest transition-all">Sandbox</button>
+                <button onclick="toggleSandbox()" class="text-slate-500 hover:text-sky-400 font-black text-[10px] uppercase tracking-widest transition-all">Sandbox</button>
             </div>
         </div>
     </nav>
@@ -160,7 +163,7 @@ async def home():
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-4 space-y-6">
                 <div id="strategyCard" class="glass p-10 rounded-[2.5rem] border border-white/5 opacity-20 blur-md pointer-events-none transition-all">
-                    <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-sky-500 mb-10 text-center opacity-80">Allocation Strategy</h3>
+                    <h3 id="strategyLabel" class="text-[10px] font-black uppercase tracking-[0.4em] text-sky-500 mb-10 text-center opacity-80">Allocation Strategy</h3>
                     <div class="space-y-12">
                         <div>
                             <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-5">
@@ -218,7 +221,7 @@ async def home():
         function closeWallets() { document.getElementById('walletModal').classList.replace('flex', 'hidden'); }
         function openPlaid() { alert("Plaid Integration Active"); document.getElementById('bankStatusText').innerText = "CONNECTED"; }
 
-        function toggleDemo() { 
+        function toggleSandbox() { 
             walletAddress = "SANDBOX_USER_" + Math.random().toString(16).slice(2,8);
             isSandbox = true; 
             onAuthSuccess(); 
@@ -235,12 +238,17 @@ async def home():
             document.getElementById('authGroup').classList.add('hidden');
             document.getElementById('blockOverlay').classList.add('hidden');
             document.getElementById('walletDisplay').classList.remove('hidden');
-            document.getElementById('addrText').innerText = walletAddress.slice(0,8).toUpperCase();
+            document.getElementById('addrText').innerText = isSandbox ? "SANDBOX_MOCK" : walletAddress.slice(0,8).toUpperCase();
             
+            if(isSandbox) {
+                document.getElementById('statusDot').classList.replace('bg-emerald-500', 'bg-orange-500');
+                document.getElementById('strategyLabel').innerText = "SANDBOX SIMULATION";
+                document.getElementById('strategyLabel').classList.replace('text-sky-500', 'text-orange-500');
+            }
+
             document.getElementById('strategyCard').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
             document.getElementById('mainTerminal').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
 
-            // Link Bank visibility logic
             const plaid = document.getElementById('plaidContainer');
             if (isSandbox) {
                 plaid.classList.add('hidden');
@@ -257,8 +265,8 @@ async def home():
             const amount = parseFloat(document.getElementById('amtRange').value);
             const btn = document.getElementById('deployBtn');
 
-            // REJECTION LOGIC: Must be GREATER than 10000
-            if (amount <= 10000) {
+            // REJECTION LOGIC: Bypassed for Sandbox. Strictly enforced for Live.
+            if (!isSandbox && amount <= 10000) {
                 const oldText = btn.innerText;
                 const oldColor = btn.className;
                 btn.innerText = "REJECTED: BELOW $10K FLOOR";
@@ -270,19 +278,28 @@ async def home():
                 return;
             }
 
-            btn.innerText = "VERIFYING FUNDS...";
+            btn.innerText = isSandbox ? "INITIALIZING SIM..." : "VERIFYING FUNDS...";
             btn.disabled = true;
 
             const res = await fetch('/activate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ address: walletAddress, amount: amount, is_demo: isSandbox })
+                body: JSON.stringify({ 
+                    address: walletAddress, 
+                    amount: amount, 
+                    is_sandbox: isSandbox 
+                })
             });
             const data = await res.json();
             
             if (data.status === "success") {
-                btn.innerText = "ENGINE ACTIVE";
-                btn.className = "w-full py-6 bg-emerald-600 text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em]";
+                if(data.mode === "sandbox") {
+                    btn.innerText = "SANDBOX ENGINE ACTIVE";
+                    btn.className = "w-full py-6 bg-orange-600 text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em]";
+                } else {
+                    btn.innerText = "ENGINE ACTIVE";
+                    btn.className = "w-full py-6 bg-emerald-600 text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em]";
+                }
             } else {
                 btn.innerText = data.message.toUpperCase();
                 btn.className = "w-full py-6 bg-red-600 text-white font-black rounded-2xl text-[12px] uppercase";
@@ -304,7 +321,7 @@ async def home():
                     if (data.logs) {
                         document.getElementById('logOutput').innerHTML = data.logs.map(l => `
                             <div class="flex gap-4 p-4 border-l-2 border-white/5 items-start">
-                                <span class="text-sky-500 font-black opacity-40">SYSTEM</span>
+                                <span class="${l.includes('[SANDBOX]') ? 'text-orange-500' : 'text-sky-500'} font-black opacity-40 italic">LOG</span>
                                 <span class="text-slate-300 uppercase font-bold tracking-tight text-[10px]">${l.split('KERNEL: ')[1] || l}</span>
                             </div>`).reverse().join('');
                     }
