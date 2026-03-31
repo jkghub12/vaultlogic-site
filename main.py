@@ -1,6 +1,7 @@
 import asyncio
 import random
 import os
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ app = FastAPI()
 # --- CONFIG ---
 PORT = int(os.environ.get("PORT", 8000))
 BASE_RPC_URL = "https://mainnet.base.org"
-audit_logs = ["VaultLogic v2.6-PRIVATE: Handshake protocol initialized..."]
+audit_logs = ["VaultLogic v2.7-LIVE: System Ready. Waiting for authentication..."]
 
 class EngineInit(BaseModel):
     address: str
@@ -21,10 +22,8 @@ class EngineInit(BaseModel):
     private_mode: bool = False
 
 def safe_checksum(address: str):
-    """Ensures we always work with EIP-55 addresses to prevent dictionary mismatches."""
     try:
-        if not is_address(address):
-            return address
+        if not is_address(address): return address
         return to_checksum_address(address)
     except:
         return address
@@ -32,17 +31,33 @@ def safe_checksum(address: str):
 def add_log(msg):
     from datetime import datetime
     timestamp = datetime.now().strftime("%H:%M:%S")
-    # Clean up common EIP-55 error noise in logs
-    if "checksum" in msg.lower():
-        msg = "NETWORK: Synchronizing EIP-55 Checksum standards for Base Mainnet."
-    
     audit_logs.append(f"[{timestamp}] KERNEL: {msg}")
     if len(audit_logs) > 30: audit_logs.pop(0)
+
+async def get_base_balance(address: str):
+    """Real-time balance check via Base RPC."""
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(BASE_RPC_URL, json=payload, timeout=5.0)
+            result = response.json()
+            hex_balance = result.get("result", "0x0")
+            # Convert wei to ETH/USD (Simulated 1:1 for this interface logic)
+            balance_decimal = int(hex_balance, 16) / 10**18
+            # In this engine, we treat 'balance' as the collateral value available
+            return balance_decimal * 3000 # Mock ETH price for collateral check
+    except Exception as e:
+        print(f"RPC Error: {e}")
+        return 0
 
 async def background_kernel_loop():
     while True:
         await asyncio.sleep(10)
-        # We use list() to avoid dictionary size change errors during iteration
         for addr in list(kernel.active_deployments.keys()):
             strat = kernel.active_deployments[addr]
             if random.random() > 0.8:
@@ -57,23 +72,11 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str, private: bool = False):
     try:
-        # CRITICAL: Normalize input so it matches the kernel key
         safe_addr = safe_checksum(address)
         stats = kernel.get_stats(safe_addr)
-        
-        # If the user is in Private/Midnight mode, we mask the sensitive numbers
         is_private_req = private == True or str(private).lower() == 'true'
-        
         if stats and is_private_req:
-            return {
-                "stats": {
-                    "principal": 0,
-                    "net_profit": 0,
-                    "is_masked": True,
-                    "status": "ENCRYPTED"
-                }, 
-                "logs": audit_logs
-            }
+            return {"stats": {"principal": 0, "net_profit": 0, "is_masked": True, "status": "ENCRYPTED"}, "logs": audit_logs}
         return {"stats": stats, "logs": audit_logs}
     except Exception as e:
         return {"stats": None, "logs": audit_logs, "error": str(e)}
@@ -82,6 +85,15 @@ async def get_stats(address: str, private: bool = False):
 async def activate_deployment(data: EngineInit):
     try:
         safe_addr = safe_checksum(data.address)
+        
+        # VALIDATION LOGIC
+        if not data.simulate:
+            actual_balance = await get_base_balance(safe_addr)
+            if actual_balance < data.amount:
+                msg = f"CRITICAL: INSUFFICIENT COLLATERAL FOR {safe_addr[:8]}. REQUIRED: ${data.amount:,.2f} | FOUND: ${actual_balance:,.2f}"
+                add_log(msg)
+                return {"status": "error", "message": msg}
+
         msg = kernel.deploy(safe_addr, data.amount, BASE_RPC_URL)
         if data.private_mode:
             add_log("PRIVACY_SHIELD: Zero-Knowledge proof generated for session.")
@@ -104,7 +116,6 @@ async def reset_deployment(address: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    # Returning the full optimized HTML with the ZK-blur CSS and Checksum-aware JS
     return """
 <!DOCTYPE html>
 <html lang="en">
@@ -117,23 +128,18 @@ async def home():
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
-        body { background-color: #040608; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        body { background-color: #040608; color: #e2e8f0; font-family: 'Inter', sans-serif; }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .glass-panel { background: rgba(10, 15, 25, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.03); }
+        .zk-blur { filter: blur(14px); opacity: 0.2; transition: all 0.8s ease; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        .zk-blur { filter: blur(14px); opacity: 0.2; transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-        input[type="range"] { -webkit-appearance: none; background: #1e293b; height: 4px; border-radius: 5px; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; background: #fff; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
-        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-10">
     <nav class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-16 gap-8">
         <div class="flex items-center gap-4">
-            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
-                <i class="fas fa-shield-halved text-black text-2xl"></i>
-            </div>
+            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center"><i class="fas fa-shield-halved text-black text-2xl"></i></div>
             <div>
                 <h1 class="text-3xl font-bold tracking-tighter uppercase italic">VaultLogic</h1>
                 <p class="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">Industrial Yield Engine</p>
@@ -144,19 +150,17 @@ async def home():
                 <span id="dot" class="w-2 h-2 bg-slate-500 rounded-full"></span>
                 <span id="statusText" class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Locked</span>
             </div>
-            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-8 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-widest">
-                AUTHENTICATE
-            </button>
+            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-8 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-widest">AUTHENTICATE</button>
         </div>
     </nav>
 
     <main id="dashboard" class="max-w-7xl mx-auto opacity-20 pointer-events-none transition-all duration-700">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-sky-500 relative">
+            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-sky-500">
                 <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Active Principal</p>
                 <h2 class="text-4xl font-bold italic mono" id="principalDisplay">$0.00</h2>
             </div>
-            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-emerald-500 relative">
+            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-emerald-500">
                 <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Net Profit (80%)</p>
                 <h2 class="text-4xl font-bold text-emerald-400 italic mono" id="liveProfit">$0.0000</h2>
             </div>
@@ -177,7 +181,7 @@ async def home():
                         </div>
                         <input type="range" min="10000" max="1000000" step="10000" value="10000" id="depositInput"
                                oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
-                               class="w-full cursor-pointer">
+                               class="w-full cursor-pointer h-1 bg-slate-800 rounded-lg appearance-none">
                     </div>
                     
                     <div class="space-y-4 mb-8 px-2">
@@ -194,7 +198,7 @@ async def home():
                     <button id="executeBtn" onclick="executeDeployment()" class="w-full py-5 bg-sky-600 text-white font-black rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-widest text-[10px]">
                         EXECUTE DEPLOYMENT
                     </button>
-                    <p id="txStatus" class="text-[10px] mt-6 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20"></p>
+                    <p id="txStatus" class="text-[10px] mt-6 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl"></p>
                 </div>
             </div>
 
@@ -225,14 +229,8 @@ async def home():
             
             const pDisp = document.getElementById('principalDisplay');
             const lProfit = document.getElementById('liveProfit');
-            
-            if(isPrivate) {
-                pDisp.classList.add('zk-blur');
-                lProfit.classList.add('zk-blur');
-            } else {
-                pDisp.classList.remove('zk-blur');
-                lProfit.classList.remove('zk-blur');
-            }
+            if(isPrivate) { pDisp.classList.add('zk-blur'); lProfit.classList.add('zk-blur'); } 
+            else { pDisp.classList.remove('zk-blur'); lProfit.classList.remove('zk-blur'); }
         }
 
         async function handleAuth() {
@@ -246,15 +244,20 @@ async def home():
                 try {
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send("eth_requestAccounts", []);
-                    userAddress = await provider.getSigner().getAddress();
-                    
-                    // Force the ethers address to Checksum format for consistency
-                    userAddress = ethers.utils.getAddress(userAddress);
+                    userAddress = ethers.utils.getAddress(await provider.getSigner().getAddress());
 
                     document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
                     document.getElementById('authBtn').innerText = "DISCONNECT";
                     document.getElementById('dot').className = 'w-2 h-2 bg-emerald-500 rounded-full';
                     document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,8)}`;
+                    
+                    // Reset UI State on connect
+                    const execBtn = document.getElementById('executeBtn');
+                    execBtn.disabled = false;
+                    execBtn.innerText = "EXECUTE DEPLOYMENT";
+                    execBtn.className = "w-full py-5 bg-sky-600 text-white font-black rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-widest text-[10px]";
+                    document.getElementById('txStatus').classList.add('hidden');
+
                     startSync();
                 } catch (e) { console.error(e); }
             }
@@ -268,6 +271,7 @@ async def home():
             document.getElementById('authBtn').innerText = "AUTHENTICATE";
             document.getElementById('statusText').innerText = "Locked";
             document.getElementById('dot').className = 'w-2 h-2 bg-slate-500 rounded-full';
+            document.getElementById('txStatus').classList.add('hidden');
         }
 
         async function executeDeployment() {
@@ -278,7 +282,8 @@ async def home():
             const status = document.getElementById('txStatus');
             
             btn.disabled = true;
-            status.classList.remove('hidden');
+            status.classList.remove('hidden', 'bg-red-500/10', 'text-red-400', 'border-red-500/20');
+            status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20";
             status.innerText = privateMode ? "ENCRYPTING SESSION..." : "ENGAGING KERNEL...";
 
             const res = await fetch('/activate', {
@@ -295,10 +300,12 @@ async def home():
             const result = await res.json();
             if (result.status === "success") {
                 btn.innerText = "ACTIVE";
+                btn.className = "w-full py-5 bg-emerald-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px]";
                 status.innerText = "PROTOCOL ENGAGED SUCCESSFULLY.";
             } else {
                 btn.disabled = false;
-                status.innerText = "ERROR: CHECK AUDIT LOGS.";
+                status.innerText = result.message || "ERROR: CHECK AUDIT LOGS.";
+                status.className = "text-[10px] mt-6 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20";
             }
         }
 
@@ -311,25 +318,28 @@ async def home():
                     const data = await res.json();
                     
                     if (data.stats) {
-                        const pDisp = document.getElementById('principalDisplay');
-                        const lProfit = document.getElementById('liveProfit');
+                        document.getElementById('principalDisplay').innerText = isPrivate ? "0x********" : '$' + data.stats.principal.toLocaleString();
+                        document.getElementById('liveProfit').innerText = isPrivate ? "ENCRYPTED" : '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
                         
-                        if (!isPrivate) {
-                            pDisp.innerText = '$' + data.stats.principal.toLocaleString();
-                            lProfit.innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
-                        } else {
-                            pDisp.innerText = "0x" + "*".repeat(8);
-                            lProfit.innerText = "ENCRYPTED";
+                        // If stats exist, ensure button shows Active
+                        if (data.stats.principal > 0) {
+                            const btn = document.getElementById('executeBtn');
+                            btn.innerText = "ACTIVE";
+                            btn.disabled = true;
+                            btn.className = "w-full py-5 bg-emerald-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px]";
                         }
                     }
 
                     const logOutput = document.getElementById('logOutput');
-                    logOutput.innerHTML = data.logs.map(l => `
-                        <div class="p-4 border-l-2 ${l.includes('ERROR') ? 'border-red-500 bg-red-500/5' : 'border-slate-800'}">
-                            <span class="text-sky-500 font-black mr-2 uppercase tracking-widest text-[9px]">Audit:</span>
-                            <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
-                        </div>
-                    `).reverse().join('');
+                    logOutput.innerHTML = data.logs.map(l => {
+                        const isErr = l.includes('CRITICAL') || l.includes('ERROR');
+                        return `
+                            <div class="p-4 border-l-2 ${isErr ? 'border-red-500 bg-red-500/5' : 'border-slate-800'}">
+                                <span class="${isErr ? 'text-red-500' : 'text-sky-500'} font-black mr-2 uppercase tracking-widest text-[9px]">Audit:</span>
+                                <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                            </div>
+                        `;
+                    }).reverse().join('');
                 } catch (e) { console.error("Sync Error", e); }
             }, 3000);
         }
