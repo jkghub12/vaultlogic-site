@@ -106,6 +106,7 @@ async def home():
             border: 2px solid #010204;
         }
         .status-pill { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+        .hidden-bank { display: none !important; }
     </style>
 </head>
 <body class="p-6 md:p-12 min-h-screen flex flex-col items-center">
@@ -187,8 +188,8 @@ async def home():
                 </div>
             </div>
 
-            <!-- Plaid / Bank Link: Now strictly on bottom left and always visible -->
-            <div id="plaidContainer" class="mt-auto">
+            <!-- Plaid / Bank Link: Visible initially, hidden when Sandbox is clicked -->
+            <div id="plaidContainer" class="mt-auto transition-all duration-300">
                 <div onclick="openPlaid()" class="glass p-8 rounded-[2rem] border border-white/5 cursor-pointer hover:border-sky-500/30 transition-all flex items-center justify-between group bg-white/[0.01]">
                     <div class="flex items-center gap-5">
                         <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-xl grayscale group-hover:grayscale-0 group-hover:bg-sky-500/10 transition-all">🏦</div>
@@ -263,11 +264,16 @@ async def home():
             document.getElementById('walletDisplay').classList.remove('hidden');
             document.getElementById('addrText').innerText = isSandbox ? "SANDBOX_MOCK" : walletAddress.slice(0,10) + "...";
             
+            // Hide Bank Account link if in Sandbox
             if(isSandbox) {
+                document.getElementById('plaidContainer').classList.add('hidden-bank');
                 document.getElementById('statusDot').className = 'w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse shadow-[0_0_8px_#f97316]';
                 document.getElementById('strategyLabel').innerText = "SANDBOX SIMULATION";
                 document.getElementById('strategyLabel').className = "text-[10px] font-black uppercase tracking-[0.5em] text-orange-500 mb-12 text-center";
                 document.getElementById('deployBtn').className = "w-full py-6 sandbox-gradient text-white font-black rounded-3xl text-[12px] uppercase tracking-[0.3em] shadow-2xl shadow-orange-500/10 active:scale-[0.98] transition-all";
+            } else {
+                // Ensure it's visible for Live flow
+                document.getElementById('plaidContainer').classList.remove('hidden-bank');
             }
 
             document.getElementById('strategyCard').classList.remove('opacity-10', 'pointer-events-none', 'blur-sm');
@@ -282,7 +288,6 @@ async def home():
             const amount = parseFloat(document.getElementById('amtRange').value);
             const btn = document.getElementById('deployBtn');
 
-            // 10k Enforcement: Bypassed for Sandbox. Strictly enforced for Live.
             if (!isSandbox && amount < 10000) {
                 const oldText = btn.innerText;
                 const oldColor = btn.className;
@@ -358,3 +363,4 @@ async def home():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+#ver 
