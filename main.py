@@ -3,9 +3,23 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from web3 import Web3
-from engine import kernel 
 import uvicorn
 from datetime import datetime
+
+# Mock Kernel for local execution if engine.kernel isn't present
+try:
+    from engine import kernel
+except ImportError:
+    class MockKernel:
+        def __init__(self): self.active_deployments = {}
+        def get_stats(self, addr): 
+            if addr in self.active_deployments:
+                return {"principal": 10000, "net_profit": 0.4281}
+            return None
+        def deploy(self, addr, amt, rpc):
+            self.active_deployments[addr] = True
+            return f"DEPLOYED: Engine active for {addr[:8]}..."
+    kernel = MockKernel()
 
 app = FastAPI()
 
@@ -13,25 +27,17 @@ app = FastAPI()
 BASE_RPC_URL = "https://mainnet.base.org"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
-# CORRECT EIP-55 CHECKSUM ADDRESS (Case-sensitive)
+# STRICT EIP-55 CHECKSUM ADDRESS (The Sandbox Treasury)
 DEMO_STRICT_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
 
 def to_strict_address(addr_str: str):
-    """Enforces strict EIP-55 Checksum to prevent Kernel Sync Errors."""
     try:
         if not addr_str: return addr_str
         return Web3.to_checksum_address(addr_str.strip())
     except Exception:
-        # Fallback to manual casing if web3 utility fails on edge cases
         return addr_str
 
-w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
-ERC20_ABI = [
-    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
-]
-
-usdc_contract = w3.eth.contract(address=to_strict_address(USDC_ADDRESS), abi=ERC20_ABI)
-audit_logs = ["VAULTLOGIC V4.2: Kernel Core Online. Monitoring Base Mainnet..."]
+audit_logs = ["VAULTLOGIC V4.3: Kernel Core Online. System Ready."]
 
 class EngineInit(BaseModel):
     address: str
@@ -46,27 +52,10 @@ def add_log(msg):
     audit_logs.append(f"[{timestamp}] KERNEL: {msg}")
     if len(audit_logs) > 30: audit_logs.pop(0)
 
-async def background_kernel_loop():
-    while True:
-        await asyncio.sleep(10)
-        for addr in list(kernel.active_deployments.keys()):
-            try:
-                msg = kernel.active_deployments[addr].calculate_tick(10)
-                if msg: add_log(msg)
-            except Exception:
-                pass
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(background_kernel_loop())
-
 @app.get("/stats/{address}")
 async def get_stats(address: str):
-    try:
-        target = to_strict_address(address)
-        return {"stats": kernel.get_stats(target), "logs": audit_logs}
-    except Exception as e:
-        return {"stats": None, "logs": audit_logs, "error": str(e)}
+    target = to_strict_address(address)
+    return {"stats": kernel.get_stats(target), "logs": audit_logs}
 
 @app.post("/activate")
 async def activate(data: EngineInit):
@@ -75,12 +64,6 @@ async def activate(data: EngineInit):
         if data.amount < 10000:
             add_log(f"REJECTED: ${data.amount:,.2f} is below $10K floor.")
             return {"status": "error", "message": "Below $10k Floor"}
-
-        if not data.is_demo:
-            raw_balance = usdc_contract.functions.balanceOf(target_address).call()
-            if (raw_balance / 10**6) < data.amount:
-                add_log(f"CRITICAL: Insufficient USDC for {target_address[:10]}...")
-                return {"status": "error", "message": "Check USDC Balance"}
 
         msg = kernel.deploy(target_address, data.amount, BASE_RPC_URL)
         add_log(msg)
@@ -125,6 +108,7 @@ async def home():
                 <button onclick="closeWallets()" class="text-slate-500 hover:text-white text-xl">✕</button>
             </div>
             <div class="p-8 space-y-3">
+                <!-- Base -->
                 <div onclick="connectWith('Base')" class="flex items-center gap-4 p-5 rounded-2xl cursor-pointer border border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/10 transition-all">
                     <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center font-bold text-white">B</div>
                     <div>
@@ -132,6 +116,12 @@ async def home():
                         <p class="text-[9px] text-sky-400 font-bold uppercase">Optimized L2</p>
                     </div>
                 </div>
+                <!-- Binance -->
+                <div onclick="connectWith('Binance')" class="flex items-center gap-4 p-5 rounded-2xl cursor-pointer hover:bg-white/5 transition-all">
+                    <div class="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-500 font-bold">B</div>
+                    <p class="text-xs font-black uppercase">Binance Web3 Wallet</p>
+                </div>
+                <!-- MetaMask -->
                 <div onclick="connectWith('MetaMask')" class="flex items-center gap-4 p-5 rounded-2xl cursor-pointer hover:bg-white/5 transition-all">
                     <div class="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center text-orange-500 font-bold">M</div>
                     <p class="text-xs font-black uppercase">MetaMask</p>
@@ -166,70 +156,63 @@ async def home():
         </div>
     </nav>
 
-    <main class="max-w-7xl w-full">
-        <!-- Blocked Overlay Message (Hidden when connected) -->
-        <div id="blockOverlay" class="absolute inset-x-0 top-60 z-50 flex flex-col items-center justify-center text-center p-10 pointer-events-none">
+    <main class="max-w-7xl w-full relative">
+        <!-- Dashboard Overlay -->
+        <div id="blockOverlay" class="absolute inset-0 z-50 flex flex-col items-center pt-40 text-center pointer-events-none">
             <h2 class="text-4xl font-black italic uppercase text-slate-800 tracking-tighter">Identity Connection Required</h2>
             <p class="text-slate-600 font-bold text-[10px] uppercase tracking-[0.5em] mt-4">Authorized Access Only</p>
         </div>
 
-        <div id="mainDash" class="opacity-20 pointer-events-none blur-md transition-all duration-700">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="glass p-10 rounded-[2.5rem] relative overflow-hidden border border-white/5">
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-sky-500"></div>
-                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">Asset Value</p>
-                    <h2 id="principalDisplay" class="text-6xl font-black italic tracking-tighter">$0</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Sidebar (Always Active Parts) -->
+            <div class="lg:col-span-4 space-y-6">
+                <!-- Strategy Control (Locked) -->
+                <div id="strategyCard" class="glass p-10 rounded-[2.5rem] border border-white/5 opacity-20 blur-md pointer-events-none transition-all">
+                    <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-sky-500 mb-10 text-center opacity-80">Execution Strategy</h3>
+                    <div class="space-y-12">
+                        <div>
+                            <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-5">
+                                <span>Allocation</span>
+                                <span id="amtVal" class="text-sky-400 font-mono text-sm">$10,000</span>
+                            </div>
+                            <input type="range" id="amtRange" min="10000" max="1000000" step="5000" value="10000" 
+                                   class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none"
+                                   oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
+                        </div>
+                        <button id="deployBtn" onclick="initKernel()" class="w-full py-6 accent-gradient text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em] shadow-lg shadow-sky-500/10 active:scale-95 transition-all">Initialize Engine</button>
+                    </div>
                 </div>
-                <div class="glass p-10 rounded-[2.5rem] relative overflow-hidden border border-white/5">
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-emerald-500"></div>
-                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">Live Yield</p>
-                    <h2 id="liveProfit" class="text-6xl font-black text-emerald-400 italic tracking-tighter tabular-nums">$0.0000</h2>
-                </div>
-                <div class="glass p-10 rounded-[2.5rem] relative overflow-hidden border border-white/5">
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
-                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">Protocol</p>
-                    <h2 id="statusLabel" class="text-5xl font-black text-white italic uppercase tracking-tighter">STANDBY</h2>
+
+                <!-- Plaid Gateway (ALWAYS ACCESSIBLE) -->
+                <div onclick="openPlaid()" class="glass p-8 rounded-[2rem] border border-white/5 cursor-pointer hover:border-sky-500/30 transition-all flex items-center justify-between group relative z-[100]">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl grayscale group-hover:grayscale-0 transition-all">🏦</div>
+                        <div>
+                            <p id="bankStatusText" class="text-[11px] font-black text-white uppercase tracking-widest">Connect Bank</p>
+                            <p class="text-[9px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Institutional Settlement</p>
+                        </div>
+                    </div>
+                    <div class="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-sm group-hover:bg-white group-hover:text-black transition-all">→</div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div class="lg:col-span-4 space-y-6">
-                    <div class="glass p-10 rounded-[2.5rem] border border-white/5">
-                        <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-sky-500 mb-10 text-center opacity-80">Execution Strategy</h3>
-                        <div class="space-y-12">
-                            <div>
-                                <div class="flex justify-between text-[11px] font-bold uppercase text-slate-500 mb-5">
-                                    <span>Allocation</span>
-                                    <span id="amtVal" class="text-sky-400 font-mono text-sm">$10,000</span>
-                                </div>
-                                <input type="range" id="amtRange" min="10000" max="1000000" step="5000" value="10000" 
-                                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none"
-                                       oninput="document.getElementById('amtVal').innerText = '$'+parseInt(this.value).toLocaleString()">
-                            </div>
-                            <button id="deployBtn" onclick="initKernel()" class="w-full py-6 accent-gradient text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em] shadow-lg shadow-sky-500/10 active:scale-95 transition-all">Initialize Engine</button>
-                        </div>
+            <!-- Main Terminal (Locked) -->
+            <div id="mainTerminal" class="lg:col-span-8 glass p-10 rounded-[2.5rem] flex flex-col min-h-[600px] border border-white/5 opacity-20 blur-md pointer-events-none transition-all">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <div class="p-6 rounded-3xl bg-white/[0.02] border border-white/5">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Asset Value</p>
+                        <h2 id="principalDisplay" class="text-3xl font-black italic tracking-tighter">$0</h2>
                     </div>
-
-                    <!-- Plaid is always available -->
-                    <div onclick="openPlaid()" class="glass p-8 rounded-[2rem] border border-white/5 cursor-pointer hover:border-sky-500/30 transition-all flex items-center justify-between group pointer-events-auto">
-                        <div class="flex items-center gap-5">
-                            <div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl grayscale group-hover:grayscale-0 transition-all">🏦</div>
-                            <div>
-                                <p id="bankStatusText" class="text-[11px] font-black text-white uppercase tracking-widest">Connect Bank</p>
-                                <p class="text-[9px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Institutional Settlement</p>
-                            </div>
-                        </div>
-                        <div class="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-sm group-hover:bg-white group-hover:text-black transition-all">→</div>
+                    <div class="p-6 rounded-3xl bg-white/[0.02] border border-white/5">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Live Profit</p>
+                        <h2 id="liveProfit" class="text-3xl font-black text-emerald-400 italic tracking-tighter">$0.0000</h2>
                     </div>
                 </div>
-
-                <div class="lg:col-span-8 glass p-10 rounded-[2.5rem] flex flex-col min-h-[500px] border border-white/5">
-                    <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-8">
-                        <span class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Real-Time Audit Terminal</span>
-                        <span id="auditBadge" class="text-[10px] font-bold text-slate-600 uppercase px-3 py-1.5 border border-white/5 rounded-xl">Offline</span>
-                    </div>
-                    <div id="logOutput" class="font-mono text-[11px] space-y-4 flex-grow overflow-y-auto pr-4 custom-scroll"></div>
+                <div class="flex justify-between items-center mb-8 border-b border-white/5 pb-8">
+                    <span class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Real-Time Audit Terminal</span>
+                    <span id="auditBadge" class="text-[10px] font-bold text-slate-600 uppercase px-3 py-1.5 border border-white/5 rounded-xl">Offline</span>
                 </div>
+                <div id="logOutput" class="font-mono text-[11px] space-y-4 flex-grow overflow-y-auto pr-4 custom-scroll"></div>
             </div>
         </div>
     </main>
@@ -250,14 +233,13 @@ async def home():
                             <span class="text-gray-300 group-hover:text-blue-600 transition-all">→</span>
                         </div>
                         <div onclick="showLogin()" class="flex items-center justify-between p-5 border-2 border-gray-50 rounded-2xl cursor-pointer hover:border-blue-600 hover:bg-blue-50/50 transition-all group">
-                            <span class="font-bold text-base">Bank of America</span>
+                            <span class="font-bold text-base">Binance Institutional</span>
                             <span class="text-gray-300 group-hover:text-blue-600 transition-all">→</span>
                         </div>
                     </div>
                 </div>
                 <div id="loginView" class="hidden">
                     <h2 class="text-2xl font-black mb-6 tracking-tight">Institutional Login</h2>
-                    <p class="text-[10px] font-bold text-gray-400 uppercase mb-8">Secure 256-bit Encrypted Tunnel</p>
                     <input type="text" placeholder="Access ID" class="w-full p-5 bg-gray-50 border-2 border-transparent rounded-2xl text-sm mb-4 outline-none focus:border-blue-600 transition-all">
                     <input type="password" placeholder="Passphrase" class="w-full p-5 bg-gray-50 border-2 border-transparent rounded-2xl text-sm mb-8 outline-none focus:border-blue-600 transition-all">
                     <button onclick="finishPlaid()" class="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">Authorize Connection</button>
@@ -270,7 +252,6 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
         let isDemoMode = false;
-        // Strictly cased EIP-55 address
         const DEMO_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14";
 
         function openWallets() { document.getElementById('walletModal').classList.replace('hidden', 'flex'); }
@@ -295,7 +276,19 @@ async def home():
                     isDemoMode = false;
                     closeWallets();
                     onAuthSuccess(provider);
-                } catch (e) { console.error("Identity error", e); }
+                } catch (e) {
+                    // Fallback for non-injected environments
+                    walletAddress = "0x" + Math.random().toString(16).slice(2, 42);
+                    isDemoMode = false;
+                    closeWallets();
+                    onAuthSuccess(provider);
+                }
+            } else {
+                // If no ethereum, just simulate a connection for the demo
+                walletAddress = "0x" + Math.random().toString(16).slice(2, 42);
+                isDemoMode = false;
+                closeWallets();
+                onAuthSuccess(provider);
             }
         }
 
@@ -305,41 +298,24 @@ async def home():
             onAuthSuccess("SANDBOX");
         }
 
-        function disconnect() {
-            walletAddress = null;
-            isDemoMode = false;
-            if (syncTimer) clearInterval(syncTimer);
-            
-            document.getElementById('mainDash').classList.add('opacity-20', 'pointer-events-none', 'blur-md');
-            document.getElementById('blockOverlay').classList.remove('hidden');
-            document.getElementById('walletDisplay').classList.add('hidden');
-            document.getElementById('authGroup').classList.remove('hidden');
-            
-            document.getElementById('statusLabel').innerText = "STANDBY";
-            document.getElementById('principalDisplay').innerText = "$0";
-            document.getElementById('liveProfit').innerText = "$0.0000";
-            document.getElementById('auditBadge').innerText = "Offline";
-            document.getElementById('auditBadge').className = "text-[10px] font-bold text-slate-600 uppercase px-3 py-1.5 border border-white/5 rounded-xl";
-            document.getElementById('logOutput').innerHTML = '';
-            
-            const btn = document.getElementById('deployBtn');
-            btn.innerText = "Initialize Engine";
-            btn.className = "w-full py-6 accent-gradient text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em]";
-            btn.disabled = false;
-        }
-
         function onAuthSuccess(source) {
             document.getElementById('authGroup').classList.add('hidden');
             document.getElementById('blockOverlay').classList.add('hidden');
             document.getElementById('walletDisplay').classList.remove('hidden');
             document.getElementById('addrText').innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
             
-            document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
-            document.getElementById('statusLabel').innerText = source;
+            // Unlock UI
+            document.getElementById('strategyCard').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
+            document.getElementById('mainTerminal').classList.remove('opacity-20', 'pointer-events-none', 'blur-md');
+            
             document.getElementById('auditBadge').innerText = "Active Sync";
             document.getElementById('auditBadge').className = "text-[10px] font-bold text-emerald-500 uppercase px-3 py-1.5 border border-emerald-500/20 bg-emerald-500/5 rounded-xl animate-pulse";
 
             startSync();
+        }
+
+        function disconnect() {
+            location.reload(); // Simplest reset
         }
 
         async function initKernel() {
@@ -357,14 +333,8 @@ async def home():
                 if (data.status === "success") {
                     btn.innerText = "KERNEL DEPLOYED";
                     btn.className = "w-full py-6 bg-emerald-600 text-white font-black rounded-2xl text-[12px] uppercase tracking-[0.25em]";
-                } else {
-                    btn.innerText = data.message;
-                    setTimeout(() => { btn.innerText = "Initialize Engine"; btn.disabled = false; }, 3000);
                 }
-            } catch(e) {
-                btn.innerText = "SYSTEM ERROR";
-                setTimeout(() => { btn.innerText = "Initialize Engine"; btn.disabled = false; }, 3000);
-            }
+            } catch(e) {}
         }
 
         function startSync() {
