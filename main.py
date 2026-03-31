@@ -13,8 +13,9 @@ app = FastAPI()
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-# Professional Checksumming for Demo Identity
-DEMO_ADDRESS = Web3.to_checksum_address("0x2d8E2788a42FA2089279743c746C9742721f5C14")
+# Ensure the backend and frontend use the EXACT same checksummed string
+DEMO_ADDRESS_STR = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
+DEMO_ADDRESS = Web3.to_checksum_address(DEMO_ADDRESS_STR)
 
 w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
 ERC20_ABI = [
@@ -48,6 +49,7 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     try:
+        # Convert to checksum to avoid the SYNC_ERROR
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
@@ -97,9 +99,38 @@ async def home():
         input[type=range] {{ accent-color: #0ea5e9; }}
         ::-webkit-scrollbar {{ width: 4px; }}
         ::-webkit-scrollbar-thumb {{ background: #1e293b; border-radius: 10px; }}
+        
+        /* Modal Animation */
+        .modal-enter {{ animation: modalFade 0.3s ease-out forwards; }}
+        @keyframes modalFade {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
     </style>
 </head>
 <body class="p-6 md:p-10 min-h-screen flex flex-col">
+    <!-- Plaid Simulation Modal -->
+    <div id="plaidModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="glass max-w-md w-full p-8 rounded-3xl border border-white/10 modal-enter">
+            <div class="w-12 h-12 bg-white rounded-xl mb-6 flex items-center justify-center">
+                <svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M2 12c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12zm11-4h-2v1h2V8zm0 2h-2v6h2v-6z"/></svg>
+            </div>
+            <h2 class="text-xl font-bold mb-2">Connect Bank Account</h2>
+            <p class="text-slate-400 text-sm mb-8 leading-relaxed">VaultLogic uses Plaid to securely verify and link your traditional bank assets for direct USD-USDC settlements.</p>
+            
+            <div class="space-y-3 mb-8">
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-white/10 transition-colors">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg"></div>
+                    <span class="text-sm font-bold">Chase Manhattan</span>
+                </div>
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-white/10 transition-colors opacity-50">
+                    <div class="w-8 h-8 bg-red-600 rounded-lg"></div>
+                    <span class="text-sm font-bold">Bank of America</span>
+                </div>
+            </div>
+            
+            <button onclick="simulatePlaidSuccess()" class="w-full py-4 bg-white text-black font-black rounded-xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Link Selected Account</button>
+            <button onclick="closePlaid()" class="w-full mt-4 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors">Cancel Connection</button>
+        </div>
+    </div>
+
     <nav class="max-w-7xl w-full mx-auto flex justify-between items-center mb-12">
         <div class="flex items-center gap-4">
             <div class="w-10 h-10 accent-gradient rounded-xl flex items-center justify-center text-white font-black text-xl italic">V</div>
@@ -165,7 +196,7 @@ async def home():
     <footer class="max-w-7xl w-full mx-auto mt-20 pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between gap-12 opacity-60 hover:opacity-100 transition-opacity">
         <div class="flex-1">
             <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Traditional Banking Gateways</h4>
-            <div class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5 max-w-sm">
+            <div onclick="openPlaid()" class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5 max-w-sm">
                 <div>
                     <p class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank (Plaid)</p>
                     <p class="text-[9px] text-slate-500 mt-1">Non-custodial bank settlements</p>
@@ -184,29 +215,46 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
         let isDemoMode = false;
-        const DEMO_ADDR = "{DEMO_ADDRESS}";
+        // Fix for Checksum Error: Direct string reference
+        const DEMO_ADDR = "{DEMO_ADDRESS_STR}";
+
+        function openPlaid() {{
+            document.getElementById('plaidModal').classList.remove('hidden');
+            document.getElementById('plaidModal').classList.add('flex');
+        }}
+
+        function closePlaid() {{
+            document.getElementById('plaidModal').classList.add('hidden');
+            document.getElementById('plaidModal').classList.remove('flex');
+        }}
+
+        function simulatePlaidSuccess() {{
+            closePlaid();
+            const logOutput = document.getElementById('logOutput');
+            logOutput.innerHTML = `
+                <div class="p-4 border-l-2 border-emerald-500 bg-emerald-500/5">
+                    <span class="text-emerald-500 font-bold uppercase mr-3">PLAID:</span>
+                    <span class="text-slate-300 uppercase">CHASE BANK LINKED SUCCESSFULLY. READY FOR FIAT SETTLEMENT.</span>
+                </div>
+            ` + logOutput.innerHTML;
+        }}
 
         function disconnect() {{
             walletAddress = null;
             isDemoMode = false;
             if (syncTimer) clearInterval(syncTimer);
             
-            // UI Reset
             document.getElementById('mainDash').classList.add('opacity-20', 'pointer-events-none');
-            
-            // Auth Button Reset
             const authBtn = document.getElementById('authBtn');
             authBtn.innerText = "Connect Wallet";
             authBtn.classList.remove('bg-sky-600', 'text-white');
             authBtn.classList.add('bg-white', 'text-black');
             authBtn.disabled = false;
             
-            // Footer Reset
             document.getElementById('demoBtn').classList.remove('hidden');
             document.getElementById('stopDemoBtn').classList.add('hidden');
             document.getElementById('disconnectBtn').classList.add('hidden');
             
-            // Data Clean
             document.getElementById('activeWallet').innerText = "Awaiting Identity...";
             document.getElementById('statusDot').classList.replace('bg-emerald-500', 'bg-slate-700');
             document.getElementById('auditText').classList.replace('text-emerald-500', 'text-slate-500');
@@ -215,7 +263,6 @@ async def home():
             document.getElementById('liveProfit').innerText = "$0.0000";
             document.getElementById('logOutput').innerHTML = "";
             
-            // Deployment Button Reset
             const dBtn = document.getElementById('deployBtn');
             dBtn.innerText = "Initialize ALM Kernel";
             dBtn.classList.add('accent-gradient');
@@ -224,22 +271,15 @@ async def home():
         }}
 
         function toggleDemo() {{
-            if(walletAddress && !isDemoMode) {{
-                // Simple logical guard, though in this UI we'd likely disconnect first
-            }}
             isDemoMode = true;
             walletAddress = DEMO_ADDR;
-            
-            // UI Switch for Footer
             document.getElementById('demoBtn').classList.add('hidden');
             document.getElementById('stopDemoBtn').classList.remove('hidden');
-            
             updateUIForIdentity("DEMO SESSION");
         }}
 
         async function toggleAuth() {{
-            if (isDemoMode) return; // Prevent connecting while in demo unless they stop demo first
-
+            if (isDemoMode) return;
             if (typeof window.ethereum === 'undefined') {{
                 alert("Metamask/Wallet required for production access.");
                 return;
@@ -263,7 +303,7 @@ async def home():
                 btn.innerText = "DEMO ACTIVE";
                 btn.classList.remove('bg-white', 'text-black');
                 btn.classList.add('bg-sky-600', 'text-white');
-                btn.disabled = true; // Button disabled during demo to force "Stop Demo" usage
+                btn.disabled = true;
             }} else {{
                 btn.innerText = displayAddr;
                 btn.classList.remove('bg-sky-600');
