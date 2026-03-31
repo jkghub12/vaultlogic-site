@@ -31,7 +31,6 @@ async def background_kernel_loop():
     while True:
         await asyncio.sleep(10)
         for addr in list(kernel.active_deployments.keys()):
-            # Trigger rate refresh every few ticks
             if random.random() > 0.8:
                 kernel.active_deployments[addr].refresh_market_rates()
             
@@ -44,9 +43,7 @@ async def startup_event():
 
 @app.get("/stats/{address}")
 async def get_stats(address: str):
-    """API for the frontend to poll status and logs."""
     try:
-        # Crucial: Ensure address is checksummed for dict lookup
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
@@ -57,11 +54,8 @@ async def get_stats(address: str):
 
 @app.post("/activate")
 async def activate(data: EngineInit):
-    """Endpoint to trigger the deployment of a new ALM strategy."""
     try:
-        # Fix for Checksum Error: Convert user input address immediately
         target_address = Web3.to_checksum_address(data.address)
-        
         if data.amount < 10000:
             add_log(f"CRITICAL REJECTION: ${data.amount:,.2f} is below the Institutional Floor.")
             return {"status": "error", "message": "Below $10k Floor"}
@@ -165,42 +159,51 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
 
-        function toggleDemo() {
-            walletAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"; // Standard Demo Checksummed Addr
-            document.getElementById('authBtn').innerText = "DEMO MODE";
-            document.getElementById('statusLabel').innerText = "DEMO ACTIVE";
+        // Auto-detect account changes in MetaMask/Coinbase Wallet
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length > 0) {
+                    walletAddress = accounts[0];
+                    updateUIForWallet();
+                } else {
+                    location.reload(); // Logged out
+                }
+            });
+        }
+
+        function updateUIForWallet() {
+            const btn = document.getElementById('authBtn');
+            btn.innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
+            btn.classList.add('bg-slate-800', 'text-white');
             document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress;
+            document.getElementById('statusLabel').innerText = "AUTHENTICATED";
             document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
             startSync();
         }
 
+        function toggleDemo() {
+            walletAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+            document.getElementById('authBtn').innerText = "DEMO MODE";
+            updateUIForWallet();
+            document.getElementById('statusLabel').innerText = "DEMO ACTIVE";
+        }
+
         async function toggleAuth() {
             const btn = document.getElementById('authBtn');
-            if (!walletAddress) {
-                if (typeof window.ethereum === 'undefined') {
-                    btn.innerText = "NO WALLET FOUND";
-                    return;
+            if (typeof window.ethereum === 'undefined') {
+                btn.innerText = "NO WALLET FOUND";
+                return;
+            }
+            try {
+                btn.innerText = "CONNECTING...";
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (accounts.length > 0) {
+                    walletAddress = accounts[0];
+                    updateUIForWallet();
                 }
-                try {
-                    btn.innerText = "CONNECTING...";
-                    btn.disabled = true;
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    
-                    if (accounts.length > 0) {
-                        walletAddress = accounts[0];
-                        btn.innerText = walletAddress.slice(0,6).toUpperCase() + "..." + walletAddress.slice(-4).toUpperCase();
-                        btn.classList.add('bg-slate-800', 'text-white');
-                        btn.disabled = false;
-                        document.getElementById('activeWallet').innerText = "IDENT: " + walletAddress;
-                        document.getElementById('statusLabel').innerText = "AUTHENTICATED";
-                        document.getElementById('mainDash').classList.remove('opacity-20', 'pointer-events-none');
-                        startSync();
-                    }
-                } catch (e) {
-                    btn.innerText = "AUTH FAILED";
-                    btn.disabled = false;
-                }
-            } else { location.reload(); }
+            } catch (e) {
+                btn.innerText = "AUTH FAILED";
+            }
         }
 
         async function initKernel() {
