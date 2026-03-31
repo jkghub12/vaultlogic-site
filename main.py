@@ -18,7 +18,7 @@ ERC20_ABI = [{"constant": True, "inputs": [{"name": "_owner", "type": "address"}
 INSTITUTIONAL_FLOOR = 10000
 BYPASS_BALANCE_CHECK = True # Set to True to test without having USDC in the wallet
 
-audit_logs = ["VaultLogic v3.6: System Ready. Awaiting Industrial Authentication..."]
+audit_logs = ["VaultLogic v3.7: System Ready. Awaiting Industrial Authentication..."]
 
 class EngineInit(BaseModel):
     address: str
@@ -46,12 +46,10 @@ async def get_stats(address: str):
 
 @app.post("/activate")
 async def activate(data: EngineInit):
-    # 1. ALWAYS Enforce the $10k Floor for Industrial Logic
     if data.amount < INSTITUTIONAL_FLOOR:
         add_log(f"CRITICAL REJECTION: ${data.amount:,.2f} is below the Institutional $10,000 Floor.")
         return {"status": "error", "message": "Below $10k Floor"}
 
-    # 2. Balance Verification
     if not BYPASS_BALANCE_CHECK:
         try:
             w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
@@ -102,7 +100,7 @@ async def home():
                 <p class="text-[9px] text-gray-600 font-bold uppercase tracking-[0.4em]">Asset-Liability Management</p>
             </div>
         </div>
-        <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-8 py-3 rounded-lg font-black text-[11px] tracking-widest uppercase hover:bg-gray-200">Authenticate</button>
+        <button id="authBtn" onclick="toggleAuth()" class="bg-white text-black px-8 py-3 rounded-lg font-black text-[11px] tracking-widest uppercase hover:bg-gray-200 transition-all">Authenticate</button>
     </header>
 
     <main id="dash" class="max-w-7xl mx-auto opacity-20 pointer-events-none transition-all duration-700">
@@ -162,20 +160,41 @@ async def home():
         let syncInt = null;
 
         async function toggleAuth() {
+            const btn = document.getElementById('authBtn');
+            
             if (!wallet) {
-                if (!window.ethereum) return;
+                if (typeof window.ethereum === 'undefined') {
+                    console.log("No Provider Found");
+                    btn.innerText = "NO WALLET DETECTED";
+                    btn.classList.add('bg-red-500', 'text-white');
+                    return;
+                }
+
                 try {
-                    // FORCE ACCOUNT SELECTION MODAL
+                    btn.innerText = "CONNECTING...";
+                    btn.disabled = true;
+
+                    // 1. Force permission request to trigger account picker
                     await window.ethereum.request({
                         method: 'wallet_requestPermissions',
                         params: [{ eth_accounts: {} }]
                     });
+
+                    // 2. Actually get the accounts
                     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    wallet = accounts[0];
-                    document.getElementById('authBtn').innerText = "DISCONNECT [" + wallet.slice(0,6).toUpperCase() + "]";
-                    document.getElementById('dash').classList.remove('opacity-20', 'pointer-events-none');
-                    startSync();
-                } catch (e) { console.error(e); }
+                    
+                    if (accounts.length > 0) {
+                        wallet = accounts[0];
+                        btn.innerText = "DISCONNECT [" + wallet.slice(0,6).toUpperCase() + "]";
+                        btn.disabled = false;
+                        document.getElementById('dash').classList.remove('opacity-20', 'pointer-events-none');
+                        startSync();
+                    }
+                } catch (e) { 
+                    console.error("Auth Error:", e);
+                    btn.innerText = "AUTHENTICATE";
+                    btn.disabled = false;
+                }
             } else {
                 await fetch('/reset/' + wallet, { method: 'POST' });
                 wallet = null;
@@ -204,23 +223,25 @@ async def home():
 
         function startSync() {
             syncInt = setInterval(async () => {
-                const res = await fetch('/stats/' + wallet);
-                const data = await res.json();
-                if (data.stats) {
-                    document.getElementById('pDisp').innerText = '$' + data.stats.principal.toLocaleString();
-                    document.getElementById('yieldDisp').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
-                    document.getElementById('venueDisp').innerText = data.stats.venue;
-                    document.getElementById('lBar').style.width = data.stats.allocation.Lending + '%';
-                    document.getElementById('pBar').style.width = data.stats.allocation.Liquidity + '%';
-                    document.getElementById('lPerc').innerText = data.stats.allocation.Lending + '%';
-                    document.getElementById('pPerc').innerText = data.stats.allocation.Liquidity + '%';
-                }
-                document.getElementById('logs').innerHTML = data.logs.map(l => `
-                    <div class="flex gap-4 p-3 ${l.includes('CRITICAL') ? 'bg-red-500/10 border-l-2 border-red-500' : 'bg-white/[0.01] border-l-2 border-slate-800'}">
-                        <span class="text-cyan-500 font-bold uppercase">KERNEL:</span>
-                        <span class="text-gray-400 uppercase">${l.split('KERNEL: ')[1] || l}</span>
-                    </div>
-                `).reverse().join('');
+                try {
+                    const res = await fetch('/stats/' + wallet);
+                    const data = await res.json();
+                    if (data.stats) {
+                        document.getElementById('pDisp').innerText = '$' + data.stats.principal.toLocaleString();
+                        document.getElementById('yieldDisp').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
+                        document.getElementById('venueDisp').innerText = data.stats.venue;
+                        document.getElementById('lBar').style.width = data.stats.allocation.Lending + '%';
+                        document.getElementById('pBar').style.width = data.stats.allocation.Liquidity + '%';
+                        document.getElementById('lPerc').innerText = data.stats.allocation.Lending + '%';
+                        document.getElementById('pPerc').innerText = data.stats.allocation.Liquidity + '%';
+                    }
+                    document.getElementById('logs').innerHTML = data.logs.map(l => `
+                        <div class="flex gap-4 p-3 ${l.includes('CRITICAL') ? 'bg-red-500/10 border-l-2 border-red-500' : 'bg-white/[0.01] border-l-2 border-slate-800'}">
+                            <span class="text-cyan-500 font-bold uppercase">KERNEL:</span>
+                            <span class="text-gray-400 uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                        </div>
+                    `).reverse().join('');
+                } catch(e) { console.error("Sync loop error", e); }
             }, 3000);
         }
     </script>
