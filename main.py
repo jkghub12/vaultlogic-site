@@ -13,7 +13,7 @@ app = FastAPI()
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
 USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-# Ensure the backend and frontend use the EXACT same checksummed string
+# Exact Checksummed Address to satisfy EIP-55
 DEMO_ADDRESS_STR = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
 DEMO_ADDRESS = Web3.to_checksum_address(DEMO_ADDRESS_STR)
 
@@ -23,7 +23,7 @@ ERC20_ABI = [
 ]
 usdc_contract = w3.eth.contract(address=USDC_ADDRESS, abi=ERC20_ABI)
 
-audit_logs = ["VAULTLOGIC V3.6-STABLE: Industrial Gateway Ready."]
+audit_logs = ["VAULTLOGIC V3.7-STABLE: Industrial Gateway Ready."]
 
 class EngineInit(BaseModel):
     address: str
@@ -49,7 +49,7 @@ async def startup_event():
 @app.get("/stats/{address}")
 async def get_stats(address: str):
     try:
-        # Convert to checksum to avoid the SYNC_ERROR
+        # Convert to checksum to avoid the SYNC_ERROR in logs
         safe_addr = Web3.to_checksum_address(address)
         return {
             "stats": kernel.get_stats(safe_addr),
@@ -100,34 +100,49 @@ async def home():
         ::-webkit-scrollbar {{ width: 4px; }}
         ::-webkit-scrollbar-thumb {{ background: #1e293b; border-radius: 10px; }}
         
-        /* Modal Animation */
         .modal-enter {{ animation: modalFade 0.3s ease-out forwards; }}
         @keyframes modalFade {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
     </style>
 </head>
 <body class="p-6 md:p-10 min-h-screen flex flex-col">
     <!-- Plaid Simulation Modal -->
-    <div id="plaidModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div id="plaidModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 backdrop-blur-md p-4">
         <div class="glass max-w-md w-full p-8 rounded-3xl border border-white/10 modal-enter">
-            <div class="w-12 h-12 bg-white rounded-xl mb-6 flex items-center justify-center">
-                <svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M2 12c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12zm11-4h-2v1h2V8zm0 2h-2v6h2v-6z"/></svg>
+            <div class="flex justify-between items-start mb-6">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M2 12c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12zm11-4h-2v1h2V8zm0 2h-2v6h2v-6z"/></svg>
+                </div>
+                <button onclick="closePlaid()" class="text-slate-500 hover:text-white transition-colors">✕</button>
             </div>
-            <h2 class="text-xl font-bold mb-2">Connect Bank Account</h2>
-            <p class="text-slate-400 text-sm mb-8 leading-relaxed">VaultLogic uses Plaid to securely verify and link your traditional bank assets for direct USD-USDC settlements.</p>
+            <h2 class="text-xl font-bold mb-2">Select Your Institution</h2>
+            <p class="text-slate-400 text-xs mb-8">VaultLogic connects via Plaid to verify your banking credentials and enable secure USD settlement.</p>
             
             <div class="space-y-3 mb-8">
-                <div class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-white/10 transition-colors">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg"></div>
-                    <span class="text-sm font-bold">Chase Manhattan</span>
+                <!-- Selectable Banks -->
+                <div onclick="selectBank('CHASE MANHATTAN')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/50 transition-all group">
+                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">C</div>
+                    <div class="flex-grow">
+                        <span class="text-sm font-bold block">Chase Manhattan</span>
+                        <span class="text-[10px] text-slate-500">Checking •••• 9012</span>
+                    </div>
                 </div>
-                <div class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-white/10 transition-colors opacity-50">
-                    <div class="w-8 h-8 bg-red-600 rounded-lg"></div>
-                    <span class="text-sm font-bold">Bank of America</span>
+                <div onclick="selectBank('BANK OF AMERICA')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-red-500/20 hover:border-red-500/50 transition-all group">
+                    <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-bold">B</div>
+                    <div class="flex-grow">
+                        <span class="text-sm font-bold block">Bank of America</span>
+                        <span class="text-[10px] text-slate-500">Savings •••• 4452</span>
+                    </div>
+                </div>
+                <div onclick="selectBank('WELLS FARGO')" class="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all group">
+                    <div class="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center text-white font-bold">W</div>
+                    <div class="flex-grow">
+                        <span class="text-sm font-bold block">Wells Fargo</span>
+                        <span class="text-[10px] text-slate-500">Business •••• 1182</span>
+                    </div>
                 </div>
             </div>
             
-            <button onclick="simulatePlaidSuccess()" class="w-full py-4 bg-white text-black font-black rounded-xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Link Selected Account</button>
-            <button onclick="closePlaid()" class="w-full mt-4 text-slate-500 text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors">Cancel Connection</button>
+            <p class="text-center text-[9px] text-slate-600 uppercase tracking-widest">Plaid is end-to-end encrypted</p>
         </div>
     </div>
 
@@ -198,16 +213,16 @@ async def home():
             <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Traditional Banking Gateways</h4>
             <div onclick="openPlaid()" class="glass p-6 rounded-2xl flex items-center justify-between group cursor-pointer hover:bg-white/5 max-w-sm">
                 <div>
-                    <p class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank (Plaid)</p>
+                    <p id="bankStatusText" class="text-[10px] font-bold text-white uppercase tracking-widest">Connect Bank (Plaid)</p>
                     <p class="text-[9px] text-slate-500 mt-1">Non-custodial bank settlements</p>
                 </div>
-                <div class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-xs group-hover:bg-white group-hover:text-black transition-all">→</div>
+                <div id="bankStatusIcon" class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-xs group-hover:bg-white group-hover:text-black transition-all">→</div>
             </div>
         </div>
         <div id="demoContainer" class="text-right">
              <button id="demoBtn" onclick="toggleDemo()" class="text-slate-600 hover:text-sky-500 text-[10px] font-bold uppercase tracking-widest transition-colors">Access Demo Sandbox</button>
              <button id="stopDemoBtn" onclick="disconnect()" class="hidden bg-red-500/10 text-red-500 border border-red-500/20 px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Stop Demo & Exit Sandbox</button>
-             <p class="text-[9px] text-slate-700 mt-2 tracking-widest">VAULTLOGIC V3.6 CORE</p>
+             <p class="text-[9px] text-slate-700 mt-2 tracking-widest uppercase">VaultLogic V3.7 Core</p>
         </div>
     </footer>
 
@@ -215,8 +230,9 @@ async def home():
         let walletAddress = null;
         let syncTimer = null;
         let isDemoMode = false;
-        // Fix for Checksum Error: Direct string reference
-        const DEMO_ADDR = "{DEMO_ADDRESS_STR}";
+        
+        // FIX: Using actual checksummed string to avoid SYNC_ERROR
+        const DEMO_ADDR = "0x2d8E2788a42FA2089279743c746C9742721f5C14";
 
         function openPlaid() {{
             document.getElementById('plaidModal').classList.remove('hidden');
@@ -228,15 +244,26 @@ async def home():
             document.getElementById('plaidModal').classList.remove('flex');
         }}
 
-        function simulatePlaidSuccess() {{
-            closePlaid();
-            const logOutput = document.getElementById('logOutput');
-            logOutput.innerHTML = `
-                <div class="p-4 border-l-2 border-emerald-500 bg-emerald-500/5">
-                    <span class="text-emerald-500 font-bold uppercase mr-3">PLAID:</span>
-                    <span class="text-slate-300 uppercase">CHASE BANK LINKED SUCCESSFULLY. READY FOR FIAT SETTLEMENT.</span>
-                </div>
-            ` + logOutput.innerHTML;
+        function selectBank(bankName) {{
+            // Simulate the secure connection process
+            const btn = event.currentTarget;
+            btn.innerHTML = `<div class="w-full text-center py-2 text-sky-400 font-bold animate-pulse">VERIFYING WITH ${{bankName}}...</div>`;
+            
+            setTimeout(() => {{
+                closePlaid();
+                document.getElementById('bankStatusText').innerText = bankName + " LINKED";
+                document.getElementById('bankStatusText').classList.add('text-emerald-400');
+                document.getElementById('bankStatusIcon').innerHTML = "✓";
+                document.getElementById('bankStatusIcon').classList.add('bg-emerald-500', 'text-white', 'border-none');
+                
+                const logOutput = document.getElementById('logOutput');
+                logOutput.innerHTML = `
+                    <div class="p-4 border-l-2 border-emerald-500 bg-emerald-500/5">
+                        <span class="text-emerald-500 font-bold uppercase mr-3">PLAID:</span>
+                        <span class="text-slate-300 uppercase">${{bankName}} VERIFIED. FIAT LIQUIDITY CHANNEL OPEN.</span>
+                    </div>
+                ` + logOutput.innerHTML;
+            }}, 1500);
         }}
 
         function disconnect() {{
@@ -263,6 +290,12 @@ async def home():
             document.getElementById('liveProfit').innerText = "$0.0000";
             document.getElementById('logOutput').innerHTML = "";
             
+            // Reset Bank Status
+            document.getElementById('bankStatusText').innerText = "Connect Bank (Plaid)";
+            document.getElementById('bankStatusText').classList.remove('text-emerald-400');
+            document.getElementById('bankStatusIcon').innerHTML = "→";
+            document.getElementById('bankStatusIcon').classList.remove('bg-emerald-500', 'text-white', 'border-none');
+
             const dBtn = document.getElementById('deployBtn');
             dBtn.innerText = "Initialize ALM Kernel";
             dBtn.classList.add('accent-gradient');
@@ -369,12 +402,15 @@ async def home():
                         document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {{minimumFractionDigits: 4}});
                     }}
                     const logOutput = document.getElementById('logOutput');
-                    logOutput.innerHTML = data.logs.map(l => `
-                        <div class="p-4 border-l-2 border-slate-800 bg-white/[0.02]">
-                            <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
-                            <span class="text-slate-300 uppercase">${{l.split('KERNEL: ')[1] || l}}</span>
-                        </div>
-                    `).reverse().join('');
+                    logOutput.innerHTML = data.logs.map(l => {{
+                        const isPlaid = l.includes('PLAID:');
+                        return `
+                            <div class="p-4 border-l-2 ${{isPlaid ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-800 bg-white/[0.02]'}}">
+                                <span class="${{isPlaid ? 'text-emerald-500' : 'text-sky-500'}} font-bold uppercase mr-3">${{isPlaid ? 'PLAID' : 'KERNEL'}}:</span>
+                                <span class="text-slate-300 uppercase">${{l.split('KERNEL: ')[1] || l.split('PLAID: ')[1] || l}}</span>
+                            </div>
+                        `;
+                    }}).reverse().join('');
                 }} catch (e) {{}}
             }}, 3000);
         }}
