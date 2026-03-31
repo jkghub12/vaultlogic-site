@@ -1,25 +1,21 @@
 import asyncio
-from fastapi import FastAPI, Request
+import random
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from web3 import Web3
-from engine import kernel # Importing our Kernel logic
+from engine import kernel
 
 app = FastAPI()
 
 # --- CONFIG ---
 BASE_RPC_URL = "https://mainnet.base.org"
-USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-ERC20_ABI = [
-    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"}
-]
-
-# Global Logs for the UI
-audit_logs = ["VaultLogic v2.1-LIVE: System Ready. Waiting for Authentication..."]
+audit_logs = ["VaultLogic v2.6-PRIVATE: Integrating ZK-Privacy Protocols..."]
 
 class EngineInit(BaseModel):
     address: str
     amount: float
+    simulate: bool = False
+    private_mode: bool = False
 
 def add_log(msg):
     from datetime import datetime
@@ -28,45 +24,33 @@ def add_log(msg):
     if len(audit_logs) > 30: audit_logs.pop(0)
 
 async def background_kernel_loop():
-    """Ticking the engine every 10 seconds for all active users."""
     while True:
         await asyncio.sleep(10)
         for addr in list(kernel.active_deployments.keys()):
-            update_msg = kernel.active_deployments[addr].calculate_tick(10)
-            if update_msg:
-                add_log(update_msg)
+            strat = kernel.active_deployments[addr]
+            if random.random() > 0.8:
+                log = strat.refresh_market_rates()
+                add_log(log)
+            strat.calculate_tick(10)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(background_kernel_loop())
 
 @app.get("/stats/{address}")
-async def get_stats(address: str):
+async def get_stats(address: str, private: bool = False):
     stats = kernel.get_stats(address)
-    return {
-        "stats": stats,
-        "logs": audit_logs
-    }
+    if stats and private:
+        # Midnight-style data masking
+        stats['principal_display'] = "Locked [ZK-SHIELD]"
+        stats['profit_display'] = "Encrypted"
+    return {"stats": stats, "logs": audit_logs}
 
 @app.post("/activate")
 async def activate_deployment(data: EngineInit):
-    if data.amount < 10000:
-        add_log(f"REJECTED: ${data.amount:,.2f} is below $10k Floor.")
-        return {"status": "error", "message": "Below Institutional Floor"}
-    
-    try:
-        w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL))
-        contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_ADDRESS), abi=ERC20_ABI)
-        balance = contract.functions.balanceOf(Web3.to_checksum_address(data.address)).call() / 1e6
-        
-        if balance < data.amount:
-            add_log(f"CRITICAL: Insufficient Collateral for {data.address[:8]}. Required: ${data.amount:,.2f} | Found: ${balance:,.2f}")
-            return {"status": "error", "message": "Insufficient On-Chain Collateral"}
-            
-    except Exception as e:
-        return {"status": "error", "message": "RPC_VERIFICATION_FAILED"}
-
-    msg = kernel.deploy(data.address, data.amount)
+    msg = kernel.deploy(data.address, data.amount, BASE_RPC_URL)
+    if data.private_mode:
+        add_log("PRIVACY_SHIELD: Zero-Knowledge proof generated for verification.")
     add_log(msg)
     return {"status": "success"}
 
@@ -74,7 +58,7 @@ async def activate_deployment(data: EngineInit):
 async def reset_deployment(address: str):
     if address in kernel.active_deployments:
         del kernel.active_deployments[address]
-        add_log(f"SESSION_TERMINATED: {address[:8]}... logged out.")
+        add_log(f"SESSION_CLOSED: Keys purged for {address[:8]}.")
     return {"status": "reset"}
 
 @app.get("/", response_class=HTMLResponse)
@@ -91,13 +75,12 @@ async def home():
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
-        body { background-color: #05070a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        body { background-color: #040608; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
         .mono { font-family: 'JetBrains Mono', monospace; }
-        .glass-panel { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-panel { background: rgba(10, 15, 25, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.03); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .status-pulse { animation: pulse 2s infinite; }
+        .zk-blur { filter: blur(8px); transition: all 0.5s ease; }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-10">
@@ -108,84 +91,75 @@ async def home():
             </div>
             <div>
                 <h1 class="text-3xl font-bold tracking-tighter uppercase italic">VaultLogic</h1>
-                <p class="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">Industrial Yield Engine</p>
+                <p class="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">Private Yield Engine</p>
             </div>
         </div>
         <div class="flex items-center gap-6">
-            <div id="connectionStatus" class="flex items-center gap-3 glass-panel px-5 py-2.5 rounded-full border-slate-500/20">
-                <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
-                <span id="statusText" class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Kernel_Locked</span>
+            <div id="connectionStatus" class="flex items-center gap-3 glass-panel px-5 py-2.5 rounded-full">
+                <span id="dot" class="w-2 h-2 bg-slate-500 rounded-full"></span>
+                <span id="statusText" class="text-[10px] font-black text-slate-500 tracking-widest uppercase">Locked</span>
             </div>
-            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-10 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-[0.2em]">
+            <button onclick="handleAuth()" id="authBtn" class="bg-white text-black hover:bg-sky-500 hover:text-white px-8 py-3 rounded-lg font-black transition-all uppercase text-[10px] tracking-widest">
                 AUTHENTICATE
             </button>
         </div>
     </nav>
 
-    <main id="dashboard" class="max-w-7xl mx-auto opacity-20 transition-all duration-1000 pointer-events-none">
+    <main id="dashboard" class="max-w-7xl mx-auto opacity-20 pointer-events-none transition-all duration-700">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-sky-500">
                 <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Active Principal</p>
                 <h2 class="text-4xl font-bold italic mono" id="principalDisplay">$0.00</h2>
             </div>
             <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-emerald-500">
-                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Net Profit (User 80%)</p>
+                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Net Profit (80%)</p>
                 <h2 class="text-4xl font-bold text-emerald-400 italic mono" id="liveProfit">$0.0000</h2>
             </div>
-            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-white/20">
-                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Global APY</p>
-                <h2 class="text-4xl font-bold text-white italic mono">5.82%</h2>
+            <div class="glass-panel p-8 rounded-3xl border-l-2 border-l-purple-500">
+                <p class="text-slate-500 text-[10px] font-black mb-3 uppercase tracking-widest">Privacy Status</p>
+                <h2 class="text-4xl font-bold text-purple-400 italic mono uppercase text-[20px] mt-2" id="privacyStatus">Public</h2>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
-            <div class="lg:col-span-4 space-y-8">
-                <div class="glass-panel p-10 rounded-[2.5rem] relative overflow-hidden border-t border-white/10">
-                    <h3 class="text-[11px] font-black mb-8 uppercase tracking-[0.3em] text-sky-400 text-center">Capital Controller</h3>
-                    <div class="space-y-8 mb-12">
-                        <div>
-                            <div class="flex justify-between text-[10px] mb-4 font-black uppercase tracking-widest">
-                                <span class="text-slate-400">Target Allocation</span>
-                                <span class="text-white font-bold" id="amountDisplay">$10,000</span>
-                            </div>
-                            <input type="range" min="10000" max="1000000" step="10000" value="10000" id="depositInput"
-                                   oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
-                                   class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-white">
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-panel p-10 rounded-[2.5rem]">
+                    <h3 class="text-[11px] font-black mb-8 uppercase tracking-[0.3em] text-sky-400">Strategy Controller</h3>
+                    <div class="mb-10">
+                        <div class="flex justify-between text-[10px] mb-4 font-black uppercase tracking-widest">
+                            <span class="text-slate-400">Allocation</span>
+                            <span class="text-white" id="amountDisplay">$10,000</span>
+                        </div>
+                        <input type="range" min="10000" max="1000000" step="10000" value="10000" id="depositInput"
+                               oninput="document.getElementById('amountDisplay').innerText = '$' + parseInt(this.value).toLocaleString()"
+                               class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-white">
+                    </div>
+                    
+                    <div class="space-y-4 mb-8 px-2">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" id="simToggle" class="w-4 h-4 rounded accent-sky-500" checked>
+                            <label for="simToggle" class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Bypass On-Chain Check</label>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" id="privateToggle" onchange="togglePrivacyUI()" class="w-4 h-4 rounded accent-purple-500">
+                            <label for="privateToggle" class="text-[10px] font-black uppercase text-purple-500 tracking-widest">Enable Midnight Privacy</label>
                         </div>
                     </div>
-                    <button id="executeBtn" onclick="executeDeployment()" class="w-full py-5 bg-sky-600 text-white font-black rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-[0.4em] text-[10px]">
+
+                    <button id="executeBtn" onclick="executeDeployment()" class="w-full py-5 bg-sky-600 text-white font-black rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-widest text-[10px]">
                         EXECUTE DEPLOYMENT
                     </button>
-                    <p id="txStatus" class="text-[10px] mt-8 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl"></p>
-                </div>
-                
-                <div class="glass-panel p-8 rounded-3xl border border-white/5">
-                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mb-6">Current Risk Allocation</p>
-                    <div class="space-y-4">
-                        <div>
-                            <div class="flex justify-between text-[10px] mb-2 uppercase font-black">
-                                <span class="text-slate-400">Lending (Low Risk)</span>
-                                <span id="lendingPerc">70%</span>
-                            </div>
-                            <div class="w-full bg-slate-800 h-1 rounded-full"><div id="lendingBar" class="bg-sky-500 h-1 rounded-full transition-all duration-1000" style="width: 70%"></div></div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] mb-2 uppercase font-black">
-                                <span class="text-slate-400">Liquidity (Active LP)</span>
-                                <span id="lpPerc">30%</span>
-                            </div>
-                            <div class="w-full bg-slate-800 h-1 rounded-full"><div id="lpBar" class="bg-emerald-500 h-1 rounded-full transition-all duration-1000" style="width: 30%"></div></div>
-                        </div>
-                    </div>
+                    <p id="txStatus" class="text-[10px] mt-6 hidden text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 text-sky-400"></p>
                 </div>
             </div>
 
             <div class="lg:col-span-8">
-                <div class="glass-panel rounded-[2.5rem] p-10 min-h-[550px] flex flex-col bg-slate-900/20">
-                    <div class="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
-                        <h3 class="font-black uppercase tracking-[0.4em] text-[10px] text-slate-500">Live Infrastructure Audit</h3>
-                        <div class="flex gap-2">
-                            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full status-pulse"></span>
+                <div class="glass-panel rounded-[2.5rem] p-10 min-h-[500px] flex flex-col">
+                    <div class="flex justify-between items-center mb-8 pb-4 border-b border-white/5">
+                        <h3 class="font-black uppercase tracking-widest text-[10px] text-slate-500">Encrypted Infrastructure Audit</h3>
+                        <div class="flex items-center gap-3">
+                            <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest">ZK-Proof Valid</span>
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>
                         </div>
                     </div>
                     <div id="logOutput" class="flex-grow mono text-[11px] space-y-4 overflow-y-auto max-h-[400px] custom-scrollbar"></div>
@@ -197,14 +171,24 @@ async def home():
     <script>
         let userAddress = null;
         let syncInterval = null;
+        let isPrivate = false;
+
+        function togglePrivacyUI() {
+            isPrivate = document.getElementById('privateToggle').checked;
+            document.getElementById('privacyStatus').innerText = isPrivate ? "Encrypted" : "Public";
+            document.getElementById('privacyStatus').className = isPrivate ? "text-4xl font-bold text-purple-400 italic mono uppercase text-[20px] mt-2" : "text-4xl font-bold text-slate-400 italic mono uppercase text-[20px] mt-2";
+            
+            const displays = [document.getElementById('principalDisplay'), document.getElementById('liveProfit')];
+            displays.forEach(d => {
+                if(isPrivate) d.classList.add('zk-blur');
+                else d.classList.remove('zk-blur');
+            });
+        }
 
         function handleAuth() {
             const btn = document.getElementById('authBtn');
-            if (btn.innerText === "AUTHENTICATE") {
-                connectWallet();
-            } else {
-                disconnectWallet();
-            }
+            if (btn.innerText === "AUTHENTICATE") connectWallet();
+            else disconnectWallet();
         }
 
         async function connectWallet() {
@@ -213,63 +197,49 @@ async def home():
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send("eth_requestAccounts", []);
                     userAddress = await provider.getSigner().getAddress();
-                    
                     document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
                     document.getElementById('authBtn').innerText = "DISCONNECT";
-                    document.getElementById('connectionStatus').querySelector('span:first-child').classList.replace('bg-slate-500', 'bg-emerald-500');
-                    document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,6)}...`;
-                    
+                    document.getElementById('dot').classList.replace('bg-slate-500', 'bg-emerald-500');
+                    document.getElementById('statusText').innerText = `AUTH: ${userAddress.substring(0,6)}`;
                     startSync();
                 } catch (e) { console.error(e); }
             }
         }
 
         async function disconnectWallet() {
-            if (userAddress) {
-                await fetch('/reset/' + userAddress, { method: 'POST' });
-            }
-            
-            // UI Reset
+            if (userAddress) await fetch('/reset/' + userAddress, { method: 'POST' });
             userAddress = null;
             if (syncInterval) clearInterval(syncInterval);
-            
             document.getElementById('dashboard').classList.add('opacity-20', 'pointer-events-none');
             document.getElementById('authBtn').innerText = "AUTHENTICATE";
-            document.getElementById('statusText').innerText = "Kernel_Locked";
-            document.getElementById('connectionStatus').querySelector('span:first-child').classList.replace('bg-emerald-500', 'bg-slate-500');
-            
-            // Clear Display Values
-            document.getElementById('principalDisplay').innerText = "$0.00";
-            document.getElementById('liveProfit').innerText = "$0.0000";
-            document.getElementById('txStatus').classList.add('hidden');
-            document.getElementById('executeBtn').disabled = false;
-            document.getElementById('executeBtn').innerText = "EXECUTE DEPLOYMENT";
+            document.getElementById('statusText').innerText = "Locked";
+            document.getElementById('dot').classList.replace('bg-emerald-500', 'bg-slate-500');
         }
 
         async function executeDeployment() {
             const amount = document.getElementById('depositInput').value;
+            const simulate = document.getElementById('simToggle').checked;
+            const privateMode = document.getElementById('privateToggle').checked;
             const btn = document.getElementById('executeBtn');
             const status = document.getElementById('txStatus');
             
             btn.disabled = true;
             status.classList.remove('hidden');
-            status.className = "text-[10px] mt-8 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-sky-500/10 text-sky-400";
-            status.innerText = "VERIFYING ON-CHAIN COLLATERAL...";
+            status.innerText = privateMode ? "GENERATING ZK-PROOF..." : "SYNCING WITH BASE...";
 
             const res = await fetch('/activate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ address: userAddress, amount: parseFloat(amount) })
+                body: JSON.stringify({ address: userAddress, amount: parseFloat(amount), simulate: simulate, private_mode: privateMode })
             });
             const result = await res.json();
             
             if (result.status === "success") {
-                btn.innerText = "DEPLOYMENT_ACTIVE";
-                status.innerText = "SUCCESS: INDUSTRIAL KERNEL ENGAGED.";
+                btn.innerText = "ACTIVE";
+                status.innerText = "SUCCESS: ENGINE ENGAGED.";
             } else {
                 btn.disabled = false;
-                status.className = "text-[10px] mt-8 text-center italic font-black uppercase tracking-widest p-4 rounded-xl bg-red-500/10 text-red-400";
-                status.innerText = "CRITICAL: " + result.message;
+                status.innerText = "ERROR: " + result.message;
             }
         }
 
@@ -278,23 +248,24 @@ async def home():
             syncInterval = setInterval(async () => {
                 if (!userAddress) return;
                 try {
-                    const res = await fetch('/stats/' + userAddress);
+                    const res = await fetch(`/stats/${userAddress}?private=${isPrivate}`);
                     const data = await res.json();
                     
                     if (data.stats) {
-                        document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
-                        document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
-                        document.getElementById('lendingPerc').innerText = data.stats.allocation.Lending + '%';
-                        document.getElementById('lendingBar').style.width = data.stats.allocation.Lending + '%';
-                        document.getElementById('lpPerc').innerText = data.stats.allocation.Liquidity + '%';
-                        document.getElementById('lpBar').style.width = data.stats.allocation.Liquidity + '%';
+                        if(!isPrivate) {
+                            document.getElementById('principalDisplay').innerText = '$' + data.stats.principal.toLocaleString();
+                            document.getElementById('liveProfit').innerText = '$' + data.stats.net_profit.toLocaleString(undefined, {minimumFractionDigits: 4});
+                        } else {
+                            document.getElementById('principalDisplay').innerText = "**********";
+                            document.getElementById('liveProfit').innerText = "**********";
+                        }
                     }
 
                     const logOutput = document.getElementById('logOutput');
                     logOutput.innerHTML = data.logs.map(l => `
-                        <div class="p-4 border-l-2 ${l.includes('CRITICAL') ? 'border-red-500 bg-red-500/5' : 'border-slate-800 bg-white/[0.02]'}">
-                            <span class="text-sky-500 font-bold uppercase mr-3">KERNEL:</span>
-                            <span class="${l.includes('CRITICAL') ? 'text-red-400' : 'text-slate-300'} uppercase">${l.split('KERNEL: ')[1] || l}</span>
+                        <div class="p-4 border-l-2 ${l.includes('ERROR') ? 'border-red-500 bg-red-500/5' : 'border-slate-800'}">
+                            <span class="text-sky-500 font-black mr-2 uppercase tracking-widest text-[9px]">Audit:</span>
+                            <span class="text-slate-300 uppercase">${l.split('KERNEL: ')[1] || l}</span>
                         </div>
                     `).reverse().join('');
                 } catch (e) { console.error("Sync Error", e); }

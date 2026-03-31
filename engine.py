@@ -1,58 +1,86 @@
 import random
 from datetime import datetime
+from web3 import Web3
+
+# Aave V3 Pool Data Provider on Base Mainnet
+AAVE_DATA_PROVIDER = "0x2d8E2788a42FA2089279743c746C9742721f5C14"
+USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+# Minimal ABI to get real-time reserve data (yield rates) from Aave
+DATA_PROVIDER_ABI = [
+    {
+        "inputs": [{"internalType": "address", "name": "asset", "type": "address"}],
+        "name": "getReserveData",
+        "outputs": [
+            {"internalType": "uint256", "name": "unbacked", "type": "uint256"},
+            {"internalType": "uint256", "name": "accruedToTreasuryScaled", "type": "uint256"},
+            {"internalType": "uint256", "name": "totalAToken", "type": "uint256"},
+            {"internalType": "uint256", "name": "totalStableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "totalVariableDebt", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "variableBorrowRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "stableBorrowRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "averageStableBorrowRate", "type": "uint256"},
+            {"internalType": "uint256", "name": "liquidityIndex", "type": "uint256"},
+            {"internalType": "uint256", "name": "variableBorrowIndex", "type": "uint256"},
+            {"internalType": "uint40", "name": "lastUpdateTimestamp", "type": "uint40"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
 
 class StrategyManager:
-    """
-    Manages capital allocation logic for a specific deployment.
-    Calculates 80/20 profit splits and simulates protocol rebalancing.
-    """
-    def __init__(self, principal, target_apy=0.0582):
+    def __init__(self, principal, rpc_url):
         self.principal = principal
-        self.target_apy = target_apy
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+        self.current_apy = 0.05  # Default fallback
         self.user_net_profit = 0.0
         self.founder_fees_collected = 0.0
-        self.start_time = datetime.now()
-        self.allocation = {"Lending": 70, "Liquidity": 30}
+        self.allocation = {"Lending (Aave V3)": 100}
+
+    def refresh_market_rates(self):
+        """Fetches REAL APY from Aave V3 on Base."""
+        try:
+            contract = self.w3.eth.contract(address=AAVE_DATA_PROVIDER, abi=DATA_PROVIDER_ABI)
+            reserve_data = contract.functions.getReserveData(USDC_ADDRESS).call()
+            # liquidityRate is index 5, returned in RAY (1e27)
+            raw_rate = reserve_data[5] 
+            self.current_apy = (raw_rate / 10**27)
+            return f"MARKET_SYNC: Aave V3 Real-Time APY: {self.current_apy*100:.2f}%"
+        except Exception as e:
+            return f"SYNC_ERROR: {str(e)}"
 
     def calculate_tick(self, seconds=10):
-        """Calculates yield and splits for a 10-second window."""
-        # Annual yield / seconds in year * window
-        gross_yield = (self.principal * self.target_apy) / 31536000 * seconds
+        # Gross yield based on actual blockchain-reported APY
+        gross_yield = (self.principal * self.current_apy) / 31536000 * seconds
         
-        # The 20% Founder Cut (Vaultlogic's Revenue)
+        # VaultLogic 80/20 Institutional Split
         fee = gross_yield * 0.20
         net = gross_yield - fee
         
         self.user_net_profit += net
         self.founder_fees_collected += fee
-        
-        # Simulate strategy shifts based on "market" conditions
-        if random.random() > 0.8:
-            new_lending = random.randint(60, 85)
-            self.allocation = {"Lending": new_lending, "Liquidity": 100 - new_lending}
-            return f"Strategy Optimized: Moved to {new_lending}% Lending / {100-new_lending}% LP"
-        
         return None
 
 class VaultLogicKernel:
     def __init__(self):
-        self.active_deployments = {} # Map: WalletAddress -> StrategyManager
+        self.active_deployments = {}
 
-    def deploy(self, address, amount):
-        self.active_deployments[address] = StrategyManager(amount)
-        return f"KERNEL_ACTIVE: Deployment of ${amount:,.2f} confirmed for {address[:8]}..."
+    def deploy(self, address, amount, rpc_url):
+        self.active_deployments[address] = StrategyManager(amount, rpc_url)
+        status = self.active_deployments[address].refresh_market_rates()
+        return f"KERNEL_ENGAGED: {status}"
 
     def get_stats(self, address):
-        if address not in self.active_deployments:
-            return None
+        if address not in self.active_deployments: return None
         strat = self.active_deployments[address]
         return {
             "principal": strat.principal,
             "net_profit": strat.user_net_profit,
             "founder_fees": strat.founder_fees_collected,
-            "allocation": strat.allocation,
-            "apy": strat.target_apy
+            "apy": strat.current_apy,
+            "allocation": strat.allocation
         }
 
-# Global Instance to be imported by main.py
 kernel = VaultLogicKernel()
