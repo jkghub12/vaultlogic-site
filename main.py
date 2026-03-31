@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Lock, Unlock, Activity, Terminal, Cpu, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Shield, Lock, Activity, Terminal, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const App = () => {
-  // --- SESSION STATE ---
+  // --- CORE SYSTEM STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [walletAddress, setWalletAddress] = useState(null);
   const [isEngaged, setIsEngaged] = useState(false);
@@ -10,11 +10,14 @@ const App = () => {
   const [netProfit, setNetProfit] = useState(0.0000);
   const [activeVenue, setActiveVenue] = useState("IDLE");
   const [isMidnight, setIsMidnight] = useState(false);
-  const [bypassOn, setBypassOn] = useState(true);
+  const [bypassOn, setBypassOn] = useState(false); // DEFAULT: ENFORCE THE FLOOR
   
-  // --- AUDIT LOGS ---
+  // MOCK DATA FROM SCREENSHOTS
+  const MOCK_WALLET_BALANCE = 3.42; 
+
+  // --- AUDIT LOGGING SYSTEM ---
   const [logs, setLogs] = useState([
-    { id: 0, type: 'AUDIT', text: 'VAULTLOGIC V3.3-STABLE: SYSTEM READY. WAITING FOR AUTHENTICATION...', color: 'text-cyan-500' }
+    { id: 0, type: 'AUDIT', text: 'VAULTLOGIC V3.4-STABLE: SYSTEM READY. WAITING FOR AUTHENTICATION...', color: 'text-cyan-500' }
   ]);
 
   const addLog = (type, text, color = 'text-gray-400') => {
@@ -23,7 +26,6 @@ const App = () => {
 
   // --- ACTIONS ---
   const connectWallet = () => {
-    // Simulate wallet connection
     const mockAddr = "0X31D82103E...";
     setWalletAddress(mockAddr);
     setIsAuthenticated(true);
@@ -31,23 +33,21 @@ const App = () => {
   };
 
   const disconnectWallet = () => {
+    // SECURITY PURGE: Explicitly kill the engine and clear state
     setIsAuthenticated(false);
     setWalletAddress(null);
-    setIsEngaged(false);
+    setIsEngaged(false); 
     setActiveVenue("IDLE");
     setNetProfit(0);
-    addLog('AUDIT', 'SESSION_CLOSED: SECURITY PURGE FOR 0X31D821...', 'text-cyan-500');
+    addLog('AUDIT', 'SESSION_CLOSED: SECURITY PURGE COMPLETED. ALL ENGINES HALTED.', 'text-cyan-500');
   };
 
   const initializeKernel = () => {
     if (!isAuthenticated) return;
 
-    // RULE: REJECT IF BELOW $10,000
-    // (Simulating a real balance check vs the user's requested allocation)
-    const mockWalletBalance = 3.42; // Example from your screenshot
-
-    if (!bypassOn && mockWalletBalance < 10000) {
-      addLog('REJECTED', `INSUFFICIENT COLLATERAL. REQ: $10,000.00 | FOUND: $${mockWalletBalance}`, 'text-red-500');
+    // RULE: REJECT IF BELOW $10,000 FLOOR (Unless Bypass is Active)
+    if (!bypassOn && MOCK_WALLET_BALANCE < 10000) {
+      addLog('REJECTED', `INSUFFICIENT COLLATERAL. REQ: $10,000.00 | FOUND: $${MOCK_WALLET_BALANCE.toFixed(2)}`, 'text-red-500');
       setIsEngaged(false);
       return;
     }
@@ -57,40 +57,40 @@ const App = () => {
     addLog('AUDIT', `SUCCESS: ASSET ALLOCATION OF $${allocation.toLocaleString()}.00 DEPLOYED VIA COMPOUND_V3.`, 'text-emerald-400');
   };
 
-  // --- YIELD SIMULATION ---
+  // --- YIELD SIMULATION (GATED) ---
   useEffect(() => {
     let interval;
-    if (isEngaged) {
+    if (isEngaged && isAuthenticated) {
       interval = setInterval(() => {
-        setNetProfit(prev => prev + (Math.random() * 0.0005));
-        if (Math.random() > 0.98) {
+        setNetProfit(prev => prev + (Math.random() * 0.0008));
+        if (Math.random() > 0.95) {
           const venues = ["AAVE V3 BASE", "MORPHO BLUE", "AERODROME LP"];
           const next = venues[Math.floor(Math.random() * venues.length)];
           setActiveVenue(next);
-          addLog('AUDIT', `REBALANCING: YIELD SPIKE DETECTED. MIGRATING LIQUIDITY TO ${next}...`, 'text-purple-400');
+          addLog('AUDIT', `REBALANCING: MIGRATING LIQUIDITY TO ${next}...`, 'text-purple-400');
         }
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [isEngaged]);
+  }, [isEngaged, isAuthenticated]);
 
   return (
-    <div className="min-h-screen bg-[#020305] text-[#e2e8f0] font-sans p-6 md:p-10 selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-[#020305] text-[#e2e8f0] font-sans p-6 md:p-10">
       
-      {/* HEADER: IMAGE 4923C9 ALIGNMENT */}
+      {/* INDUSTRIAL HEADER */}
       <header className="max-w-7xl mx-auto flex justify-between items-center mb-16">
         <div className="flex items-center gap-5">
-          <div className="w-12 h-12 bg-white rounded-xl shadow-[0_0_30px_rgba(255,255,255,0.1)] flex items-center justify-center">
+          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]">
             <div className="w-7 h-7 border-[5px] border-black rounded-sm"></div>
           </div>
           <div>
-            <h1 className="text-2xl font-black italic tracking-tighter leading-none text-white">VAULTLOGIC</h1>
+            <h1 className="text-2xl font-black italic tracking-tighter leading-none text-white uppercase">VAULTLOGIC</h1>
             <p className="text-[10px] tracking-[0.4em] text-gray-600 font-bold mt-1 uppercase">Industrial Yield Engine</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className={`px-5 py-2 rounded-full border border-white/5 flex items-center gap-3 bg-[#0a0c12]`}>
+          <div className="px-5 py-2 rounded-full border border-white/5 flex items-center gap-3 bg-[#0a0c12]">
             <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 animate-pulse' : 'bg-gray-700'}`}></div>
             <span className="text-[10px] font-mono font-bold tracking-widest text-gray-500 uppercase">
               {isAuthenticated ? `AUTH: ${walletAddress}` : 'LOCKED'}
@@ -98,9 +98,7 @@ const App = () => {
           </div>
           <button 
             onClick={isAuthenticated ? disconnectWallet : connectWallet}
-            className={`px-8 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-[0.2em] transition-all ${
-                isAuthenticated ? 'bg-white text-black hover:bg-gray-200' : 'bg-white text-black'
-            }`}
+            className="px-8 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-[0.2em] bg-white text-black hover:bg-gray-200 transition-all"
           >
             {isAuthenticated ? 'Disconnect' : 'Authenticate'}
           </button>
@@ -109,12 +107,12 @@ const App = () => {
 
       <main className="max-w-7xl mx-auto space-y-8">
         
-        {/* TOP ROW METRICS */}
+        {/* METRICS ROW */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#06080c] border-l-2 border-cyan-500 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+          <div className="bg-[#06080c] border-l-2 border-cyan-500 rounded-2xl p-8 shadow-2xl">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-6">Active Principal</p>
             <p className="text-5xl font-black italic tracking-tighter text-white">
-                ${allocation.toLocaleString()}
+                ${isEngaged ? allocation.toLocaleString() : "0"}
             </p>
           </div>
           <div className="bg-[#06080c] border-l-2 border-emerald-500 rounded-2xl p-8 shadow-2xl">
@@ -135,7 +133,7 @@ const App = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* STRATEGY CONTROLLER: IMAGE 49232C ALIGNMENT */}
+          {/* CONTROLLER */}
           <div className="lg:col-span-4 bg-[#06080c] border border-white/5 rounded-[32px] p-10 flex flex-col">
             <h2 className="text-[11px] font-black tracking-[0.3em] text-cyan-500 uppercase mb-10">Strategy Controller</h2>
             
@@ -153,14 +151,14 @@ const App = () => {
               </div>
 
               <div className="space-y-6">
-                <div onClick={() => setBypassOn(!bypassOn)} className="flex items-center gap-4 cursor-pointer group">
+                <div onClick={() => setBypassOn(!bypassOn)} className="flex items-center gap-4 cursor-pointer">
                   <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${bypassOn ? 'bg-cyan-600 border-cyan-600 shadow-[0_0_10px_rgba(8,145,178,0.4)]' : 'border-gray-800'}`}>
                     {bypassOn && <CheckCircle2 size={12} className="text-white" />}
                   </div>
                   <span className={`text-[10px] font-black uppercase tracking-widest ${bypassOn ? 'text-gray-300' : 'text-gray-600'}`}>Bypass On-Chain Check</span>
                 </div>
 
-                <div onClick={() => setIsMidnight(!isMidnight)} className="flex items-center gap-4 cursor-pointer group">
+                <div onClick={() => setIsMidnight(!isMidnight)} className="flex items-center gap-4 cursor-pointer">
                   <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${isMidnight ? 'bg-purple-600 border-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.4)]' : 'border-gray-800'}`}>
                     {isMidnight && <Lock size={12} className="text-white" />}
                   </div>
@@ -175,16 +173,14 @@ const App = () => {
                 disabled={!isAuthenticated}
                 className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all duration-300 ${
                   !isAuthenticated ? 'bg-gray-900 text-gray-700' :
-                  isEngaged 
-                    ? 'bg-emerald-600 text-white shadow-[0_0_30px_rgba(16,185,129,0.3)]' 
-                    : 'bg-cyan-700 text-white hover:bg-cyan-600'
+                  isEngaged ? 'bg-emerald-600 text-white shadow-[0_0_30px_rgba(16,185,129,0.3)]' : 'bg-cyan-700 text-white hover:bg-cyan-600'
                 }`}
               >
                 {isEngaged ? 'Active' : 'Initialize Kernel'}
               </button>
               
               {isEngaged && (
-                <div className="w-full py-4 px-6 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-center">
+                <div className="w-full py-4 px-6 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-center animate-in fade-in zoom-in duration-300">
                   <span className="text-[9px] font-black italic tracking-widest text-emerald-500 uppercase">
                     Protocol Engaged Successfully.
                   </span>
@@ -193,7 +189,7 @@ const App = () => {
             </div>
           </div>
 
-          {/* INFRASTRUCTURE AUDIT TERMINAL */}
+          {/* AUDIT TERMINAL */}
           <div className="lg:col-span-8 bg-[#06080c] border border-white/5 rounded-[32px] flex flex-col overflow-hidden">
             <div className="px-10 py-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
               <div className="flex items-center gap-3">
@@ -206,7 +202,7 @@ const App = () => {
               </div>
             </div>
 
-            <div className="flex-1 p-10 font-mono text-[11px] overflow-y-auto space-y-6 max-h-[550px] scrollbar-hide">
+            <div className="flex-1 p-10 font-mono text-[11px] overflow-y-auto space-y-6 max-h-[550px]">
               {logs.map((log) => (
                 <div key={log.id} className="flex gap-6 border-l border-white/5 pl-6 relative">
                   {log.type === 'REJECTED' && <div className="absolute left-[-1px] top-0 bottom-0 w-[2px] bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>}
@@ -220,7 +216,7 @@ const App = () => {
         </div>
       </main>
       
-      {/* BACKGROUND DECOR */}
+      {/* BG DECOR */}
       <div className="fixed bottom-0 right-0 opacity-[0.02] pointer-events-none -mb-32 -mr-32">
         <Activity size={800} />
       </div>
