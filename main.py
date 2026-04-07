@@ -7,7 +7,7 @@ from datetime import datetime
 import random
 import hashlib
 
-# --- VAULTLOGIC HYBRID KERNEL (V8.0) ---
+# --- VAULTLOGIC HYBRID KERNEL (V8.1) ---
 class VaultLogicKernel:
     def __init__(self):
         self.vaults = {}
@@ -17,7 +17,7 @@ class VaultLogicKernel:
             "DEFI_UTILIZATION": {"apy": 0.078},
             "EXCHANGE_FIXED": {"apy": 0.092}
         }
-        self.logs = [f"KERNEL V8.0 // HYBRID VERIFICATION ACTIVE // {datetime.now().strftime('%H:%M:%S')}"]
+        self.logs = [f"KERNEL V8.1 // HYBRID VERIFICATION ACTIVE // {datetime.now().strftime('%H:%M:%S')}"]
 
     def log(self, msg, type="INFO"):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -27,14 +27,12 @@ class VaultLogicKernel:
     def process_yield(self, address):
         if address not in self.vaults: return None
         v = self.vaults[address]
-        # Yield scouting based on authorized amount
         avg_apy = 0.071 + random.uniform(-0.0005, 0.0005)
         earned = v['principal'] * (avg_apy / 31536000) * 2
         v['yield'] += earned
         return {"stealth_id": v['stealth_id'], "principal": v['principal'], "yield": v['yield'], "apy": avg_apy * 100}
 
     def deploy(self, address, amount, actual_balance):
-        # The Kernel enforces the $10k gate regardless of source
         if actual_balance < self.institutional_floor:
             self.log(f"REJECTED: ${actual_balance:,.2f} BELOW FLOOR.", type="SECURE")
             return False, "Insufficient Institutional Balance"
@@ -67,13 +65,13 @@ async def deploy(data: DeployReq):
 
 @app.get("/", response_class=HTMLResponse)
 async def terminal():
-    return """
+    html_content = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VaultLogic | Hybrid Verification</title>
+    <title>VaultLogic | Institutional Gate</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
@@ -88,7 +86,6 @@ async def terminal():
     </style>
 </head>
 <body class="p-4 md:p-12 min-h-screen flex flex-col">
-
     <div id="gate" class="fixed inset-0 z-[100] bg-[#010204] flex flex-col items-center justify-center p-6 text-center">
         <div class="w-20 h-20 bg-sky-500 rounded-[2.2rem] mb-8 flex items-center justify-center text-3xl font-bold italic text-white shadow-2xl">V</div>
         <h1 class="text-3xl font-bold tracking-tighter mb-2 italic uppercase">VaultLogic</h1>
@@ -106,17 +103,14 @@ async def terminal():
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <!-- Settlement Section -->
             <div class="lg:col-span-4 space-y-6">
                 <div class="glass p-8 rounded-[2.5rem] status-pill">
                     <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-sky-500 mb-8">Asset Verification</h3>
-                    
                     <div class="mb-10 p-6 bg-white/[0.02] rounded-2xl border border-white/5">
                         <p class="text-[9px] text-slate-500 uppercase font-bold mb-2 tracking-widest">Base Network USDC</p>
                         <h4 id="displayBal" class="text-3xl font-bold text-white tabular-nums">$0.00</h4>
                         <div id="gateStatus" class="mt-3 text-[8px] font-black uppercase px-2 py-1 bg-red-500/10 text-red-400 w-fit rounded">LOCKED: BELOW FLOOR</div>
                     </div>
-
                     <div class="space-y-6">
                         <div>
                             <label class="text-[9px] text-slate-500 uppercase font-bold block mb-3">Scout Allocation</label>
@@ -125,14 +119,12 @@ async def terminal():
                         <button id="authBtn" onclick="authorize()" class="w-full py-5 bg-sky-600 text-white font-black rounded-2xl uppercase tracking-widest text-[11px] transition-all">Authorize Scout</button>
                     </div>
                 </div>
-
                 <div class="glass p-8 rounded-[2.5rem]">
                     <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Market Drivers (2026)</h3>
                     <div id="mktList" class="space-y-4"></div>
                 </div>
             </div>
 
-            <!-- Performance Section -->
             <div class="lg:col-span-8 space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="glass p-10 rounded-[2.5rem]">
@@ -144,7 +136,6 @@ async def terminal():
                         <h2 id="yieldText" class="text-4xl font-bold text-emerald-400 italic tabular-nums tracking-tighter">$0.000000</h2>
                     </div>
                 </div>
-
                 <div class="glass p-10 rounded-[2.5rem] flex-grow flex flex-col min-h-[480px]">
                     <div class="flex justify-between items-center mb-8 pb-6 border-b border-white/5">
                         <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Institutional Verification Log</p>
@@ -156,7 +147,6 @@ async def terminal():
         </div>
     </div>
 
-    <!-- Footer with Developer Bypass -->
     <footer class="mt-12 text-center">
         <p class="text-[9px] text-slate-700 uppercase tracking-widest">VaultLogic 2026 // Distributed Settlement Engine</p>
         <button onclick="devOverride()" class="text-[8px] text-slate-800 mt-4 uppercase hover:text-sky-900 transition-colors">Developer Override (Demo Mode)</button>
@@ -169,30 +159,30 @@ async def terminal():
 
         async function initConnection() {
             if (!window.ethereum) return alert("MetaMask or Coinbase Wallet required.");
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const accounts = await provider.send("eth_requestAccounts", []);
-            wallet = accounts[0];
-
-            document.getElementById('gate').classList.add('hidden');
-            document.getElementById('main').classList.remove('hidden');
-            setTimeout(() => document.getElementById('main').classList.add('opacity-100'), 50);
-
             try {
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                wallet = accounts[0];
+
+                document.getElementById('gate').classList.add('hidden');
+                document.getElementById('main').classList.remove('hidden');
+                setTimeout(() => document.getElementById('main').classList.add('opacity-100'), 50);
+
                 const abi = ["function balanceOf(address) view returns (uint256)"];
                 const contract = new ethers.Contract(USDC_BASE, abi, provider);
                 const rawBal = await contract.balanceOf(wallet);
                 verifiedBalance = parseFloat(ethers.utils.formatUnits(rawBal, 6));
+                
+                updateUI();
+                startHeartbeat();
             } catch (e) {
-                verifiedBalance = 0.00;
+                console.error(e);
             }
-            updateUI();
-            startHeartbeat();
         }
 
         function devOverride() {
             verifiedBalance = 100000.00;
             updateUI();
-            console.log("Dev Override Active: $100k injected.");
         }
 
         function updateUI() {
@@ -218,7 +208,6 @@ async def terminal():
         async function authorize() {
             const val = parseFloat(document.getElementById('scoutInput').value);
             if (val < 10000) return alert("Min. $10,000 Institutional Floor Required.");
-
             const res = await fetch('/deploy', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -237,30 +226,37 @@ async def terminal():
 
         function startHeartbeat() {
             setInterval(async () => {
-                const res = await fetch('/heartbeat/' + wallet);
-                const d = await res.json();
-                if(d.stats) {
-                    document.getElementById('stealthText').innerText = d.stats.stealth_id;
-                    document.getElementById('yieldText').innerText = '$' + d.stats.yield.toLocaleString(undefined, {minimumFractionDigits: 6});
-                    document.getElementById('apyText').innerText = d.stats.apy.toFixed(2) + "% APY";
-                }
-                if(d.markets) {
-                    document.getElementById('mktList').innerHTML = Object.entries(d.markets).map(([k,v]) => 
-                        `<div class="flex justify-between border-b border-white/5 pb-3">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">${k.replace('_', ' ')}</span>
-                            <span class="text-[10px] font-bold text-white">${(v.apy*100).toFixed(2)}%</span>
-                        </div>`
-                    ).join('');
-                }
-                if(d.logs) {
-                    document.getElementById('logBox').innerHTML = d.logs.map(l => `
-                        <div class="flex gap-4">
-                            <span class="text-sky-500 font-bold">>>></span>
-                            <span class="uppercase text-slate-400 font-medium">${l.split('] ')[1] || l}</span>
-                        </div>`).reverse().join('');
-                }
+                try {
+                    const res = await fetch('/heartbeat/' + wallet);
+                    const d = await res.json();
+                    if(d.stats) {
+                        document.getElementById('stealthText').innerText = d.stats.stealth_id;
+                        document.getElementById('yieldText').innerText = '$' + d.stats.yield.toLocaleString(undefined, {minimumFractionDigits: 6});
+                        document.getElementById('apyText').innerText = d.stats.apy.toFixed(2) + "% APY";
+                    }
+                    if(d.markets) {
+                        document.getElementById('mktList').innerHTML = Object.entries(d.markets).map(([k,v]) => 
+                            `<div class="flex justify-between border-b border-white/5 pb-3">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">${k.replace('_', ' ')}</span>
+                                <span class="text-[10px] font-bold text-white">${(v.apy*100).toFixed(2)}%</span>
+                            </div>`
+                        ).join('');
+                    }
+                    if(d.logs) {
+                        document.getElementById('logBox').innerHTML = d.logs.map(l => `
+                            <div class="flex gap-4">
+                                <span class="text-sky-500 font-bold">>>></span>
+                                <span class="uppercase text-slate-400 font-medium">${l.split('] ')[1] || l}</span>
+                            </div>`).reverse().join('');
+                    }
+                } catch(e) {}
             }, 2000);
         }
     </script>
 </body>
 </html>
+"""
+    return html_content
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
