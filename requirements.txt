@@ -1,7 +1,4 @@
 fastapi
 uvicorn
-python-dotenv
-httpx
-psycopg2-binary
-pydantic
-web3
+jinja2
+3.  **GitHub:** Push both files to a new repository.
