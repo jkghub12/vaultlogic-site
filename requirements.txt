@@ -1,4 +1,3 @@
 fastapi
 uvicorn
 jinja2
-3.  **GitHub:** Push both files to a new repository.
